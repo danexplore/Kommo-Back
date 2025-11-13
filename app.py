@@ -4,9 +4,6 @@ from datetime import datetime, timedelta
 import os
 from supabase import create_client, Client
 import plotly.express as px
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # Configuração da página
 st.set_page_config(
@@ -46,8 +43,8 @@ STATUS_POS_DEMO = COMPLETED_STATUSES
 @st.cache_resource
 def init_supabase():
     """Inicializa conexão com Supabase"""
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
     
     if not url or not key:
         st.error("⚠️ Credenciais do Supabase não configuradas. Configure SUPABASE_URL e SUPABASE_KEY.")
