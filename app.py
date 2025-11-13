@@ -76,15 +76,15 @@ st.markdown("""
     /* Títulos */
     h1 {
         font-weight: 800;
-        color: #00d4ff;
-        text-shadow: 0 2px 10px rgba(0, 212, 255, 0.3);
+        color: #4A9FFF;
+        text-shadow: 0 2px 10px rgba(74, 159, 255, 0.3);
         font-size: 2.5rem;
         margin-bottom: 0.5rem;
     }
     
     h2 {
         font-weight: 700;
-        color: #00d4ff;
+        color: #4A9FFF;
         font-size: 1.8rem;
         margin-top: 2rem;
         margin-bottom: 1rem;
@@ -92,13 +92,13 @@ st.markdown("""
     
     h3 {
         font-weight: 600;
-        color: #00d4ff;
+        color: #4A9FFF;
         font-size: 1.3rem;
     }
     
     /* Dividers */
     hr, .stDivider {
-        border-color: rgba(0, 212, 255, 0.2);
+        border-color: rgba(74, 159, 255, 0.2);
     }
     
     /* Métricas */
@@ -106,15 +106,15 @@ st.markdown("""
         background: linear-gradient(135deg, rgba(26, 31, 58, 0.8) 0%, rgba(15, 20, 40, 0.8) 100%);
         padding: 1.5rem;
         border-radius: 12px;
-        border: 1px solid rgba(0, 212, 255, 0.2);
-        box-shadow: 0 8px 32px 0 rgba(0, 212, 255, 0.1);
+        border: 1px solid rgba(74, 159, 255, 0.2);
+        box-shadow: 0 8px 32px 0 rgba(74, 159, 255, 0.1);
     }
     
     div[data-testid="stMetricValue"] {
         font-size: 2.5rem;
         font-weight: 800;
-        color: #00d4ff;
-        text-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
+        color: #4A9FFF;
+        text-shadow: 0 2px 8px rgba(74, 159, 255, 0.3);
     }
     
     div[data-testid="stMetricLabel"] {
@@ -125,24 +125,24 @@ st.markdown("""
     
     div[data-testid="stMetricDelta"] {
         font-size: 0.9rem;
-        color: #00d4ff;
+        color: #4A9FFF;
     }
     
     /* Tabelas */
     .stDataFrame {
         background: linear-gradient(135deg, rgba(26, 31, 58, 0.95) 0%, rgba(15, 20, 40, 0.95) 100%) !important;
         border-radius: 12px;
-        border: 2px solid rgba(0, 212, 255, 0.25) !important;
-        box-shadow: 0 8px 32px 0 rgba(0, 212, 255, 0.1);
+        border: 2px solid rgba(74, 159, 255, 0.25) !important;
+        box-shadow: 0 8px 32px 0 rgba(74, 159, 255, 0.1);
         overflow: hidden;
     }
     
     .stDataFrame th {
-        background: linear-gradient(135deg, rgba(0, 212, 255, 0.25) 0%, rgba(0, 180, 220, 0.15) 100%) !important;
-        color: #00ffff !important;
+        background: linear-gradient(135deg, rgba(74, 159, 255, 0.25) 0%, rgba(43, 127, 232, 0.15) 100%) !important;
+        color: #4A9FFF !important;
         font-weight: 700;
         border: none !important;
-        border-bottom: 2px solid rgba(0, 212, 255, 0.3) !important;
+        border-bottom: 2px solid rgba(74, 159, 255, 0.3) !important;
         padding: 12px !important;
         text-transform: uppercase;
         font-size: 12px;
@@ -150,10 +150,10 @@ st.markdown("""
     }
     
     .stDataFrame td {
-        border-color: rgba(0, 212, 255, 0.15) !important;
+        border-color: rgba(74, 159, 255, 0.15) !important;
         color: #ffffff !important;
         padding: 10px 12px !important;
-        border-bottom: 1px solid rgba(0, 212, 255, 0.08) !important;
+        border-bottom: 1px solid rgba(74, 159, 255, 0.08) !important;
     }
     
     .stDataFrame tr {
@@ -161,24 +161,24 @@ st.markdown("""
     }
     
     .stDataFrame tbody tr:hover {
-        background-color: rgba(0, 212, 255, 0.08) !important;
-        border-left: 3px solid #00d4ff !important;
+        background-color: rgba(74, 159, 255, 0.08) !important;
+        border-left: 3px solid #4A9FFF !important;
     }
     
     .stDataFrame tbody tr:nth-child(even) {
-        background-color: rgba(0, 212, 255, 0.02) !important;
+        background-color: rgba(74, 159, 255, 0.02) !important;
     }
     
     /* Alertas */
     .stAlert {
         background: linear-gradient(135deg, rgba(26, 31, 58, 0.9) 0%, rgba(15, 20, 40, 0.9) 100%);
         border-radius: 12px;
-        border: 1px solid rgba(0, 212, 255, 0.3);
+        border: 1px solid rgba(74, 159, 255, 0.3);
         color: #ffffff;
     }
     
     .stAlert-info {
-        border-left: 4px solid #00d4ff;
+        border-left: 4px solid #4A9FFF;
     }
     
     .stAlert-warning {
@@ -196,7 +196,7 @@ st.markdown("""
     /* Abas */
     .stTabs [data-baseweb="tab-list"] {
         gap: 12px;
-        border-bottom: 2px solid rgba(0, 212, 255, 0.1);
+        border-bottom: 2px solid rgba(74, 159, 255, 0.1);
     }
     
     .stTabs [data-baseweb="tab"] {
@@ -206,19 +206,19 @@ st.markdown("""
         border-radius: 12px 12px 0 0;
         font-weight: 600;
         color: #b0b0b0;
-        border: 1px solid rgba(0, 212, 255, 0.1);
+        border: 1px solid rgba(74, 159, 255, 0.1);
     }
     
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 180, 220, 0.1) 100%);
-        color: #00d4ff;
-        border: 2px solid #00d4ff;
+        background: linear-gradient(135deg, rgba(74, 159, 255, 0.2) 0%, rgba(43, 127, 232, 0.1) 100%);
+        color: #4A9FFF;
+        border: 2px solid #4A9FFF;
         border-bottom: none;
-        box-shadow: 0 -4px 12px rgba(0, 212, 255, 0.15);
+        box-shadow: 0 -4px 12px rgba(74, 159, 255, 0.15);
     }
     
     .stTabs [aria-selected="false"]:hover {
-        background-color: rgba(0, 212, 255, 0.1);
+        background-color: rgba(74, 159, 255, 0.1);
         color: #ffffff;
     }
     
@@ -234,7 +234,7 @@ st.markdown("""
     section[data-testid="stSidebar"] h1,
     section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] h3 {
-        color: #00d4ff;
+        color: #4A9FFF;
     }
     
     section[data-testid="stSidebar"] label {
@@ -244,48 +244,48 @@ st.markdown("""
     
     section[data-testid="stSidebar"] .stSelectbox > div > div,
     section[data-testid="stSidebar"] .stMultiSelect > div > div {
-        background-color: rgba(0, 212, 255, 0.08);
-        border-color: rgba(0, 212, 255, 0.2);
+        background-color: rgba(74, 159, 255, 0.08);
+        border-color: rgba(74, 159, 255, 0.2);
         border-radius: 8px;
     }
     
     section[data-testid="stSidebar"] input,
     section[data-testid="stSidebar"] select {
-        background-color: rgba(0, 212, 255, 0.08) !important;
+        background-color: rgba(74, 159, 255, 0.08) !important;
         color: #ffffff !important;
-        border-color: rgba(0, 212, 255, 0.2) !important;
+        border-color: rgba(74, 159, 255, 0.2) !important;
         border-radius: 8px !important;
     }
     
     section[data-testid="stSidebar"] button {
-        background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 100%);
-        color: #0a0e27;
+        background: linear-gradient(135deg, #4A9FFF 0%, #2B7FE8 100%);
+        color: #ffffff;
         border: none;
         font-weight: 600;
         border-radius: 8px;
     }
     
     section[data-testid="stSidebar"] button:hover {
-        background: linear-gradient(135deg, #00ffff 0%, #00d4ff 100%);
-        box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+        background: linear-gradient(135deg, #5AAFFF 0%, #4A9FFF 100%);
+        box-shadow: 0 4px 12px rgba(74, 159, 255, 0.3);
     }
     
     section[data-testid="stSidebar"] .stInfo, 
     section[data-testid="stSidebar"] .stWarning,
     section[data-testid="stSidebar"] .stError {
-        background-color: rgba(0, 212, 255, 0.1);
-        border-color: rgba(0, 212, 255, 0.3);
+        background-color: rgba(74, 159, 255, 0.1);
+        border-color: rgba(74, 159, 255, 0.3);
     }
     
     /* Links */
     a {
-        color: #00d4ff;
+        color: #4A9FFF;
         text-decoration: none;
         font-weight: 600;
     }
     
     a:hover {
-        color: #00ffff;
+        color: #5AAFFF;
         text-decoration: underline;
     }
     
@@ -293,9 +293,9 @@ st.markdown("""
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stDateInput > div > div > input {
-        background-color: rgba(0, 212, 255, 0.08) !important;
+        background-color: rgba(74, 159, 255, 0.08) !important;
         color: #ffffff !important;
-        border-color: rgba(0, 212, 255, 0.2) !important;
+        border-color: rgba(74, 159, 255, 0.2) !important;
         border-radius: 8px !important;
     }
     
@@ -316,8 +316,8 @@ st.markdown("""
     
     /* Gradiente de destaque para cards */
     .metric-card {
-        background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 150, 180, 0.05) 100%);
-        border-left: 4px solid #00d4ff;
+        background: linear-gradient(135deg, rgba(74, 159, 255, 0.1) 0%, rgba(43, 127, 232, 0.05) 100%);
+        border-left: 4px solid #4A9FFF;
         border-radius: 12px;
         padding: 1.5rem;
     }
@@ -383,7 +383,14 @@ def format_dataframe_with_links(df, id_column='id', name_column='lead_name'):
 st.title("📊 Painel de Acompanhamento de Leads - Kommo")
 st.markdown("---")
 
-# Sidebar - Filtros Globais
+# Sidebar - Logo e Filtros Globais
+# Adicionar logo no sidebar
+try:
+    st.sidebar.image("logo_ecosys_auto.png", use_container_width=True)
+    st.sidebar.markdown("---")
+except:
+    pass  # Se a logo não existir, apenas pular
+
 st.sidebar.header("🔍 Filtros Globais")
 
 # Filtro de Período
@@ -1416,57 +1423,6 @@ with tab6:
             st.info("Nenhuma chamada encontrada para os vendedores selecionados no período.")
     else:
         st.info("⚠️ Dados de chamadas não disponíveis. Certifique-se de que a função RPC 'get_chamadas_vendedores' está configurada no banco de dados.")
-        
-        with st.expander("ℹ️ Como configurar essa funcionalidade"):
-            st.code("""
-CREATE OR REPLACE FUNCTION get_chamadas_vendedores(
-    data_inicio TIMESTAMPTZ,
-    data_fim TIMESTAMPTZ
-)
-RETURNS TABLE (
-    name TEXT,
-    id TEXT,
-    ramal INTEGER,
-    atendente TEXT,
-    atendido_em TIMESTAMPTZ,
-    finalizado_em TIMESTAMPTZ,
-    duration FLOAT,
-    causa_desligamento TEXT,
-    url_gravacao TEXT,
-    created_at TIMESTAMPTZ
-) AS $$
-WITH a4c as (
-    SELECT
-        id,
-        CASE id
-            WHEN 14164344 THEN 1012
-            WHEN 14164336 THEN 1011
-            WHEN 12476067 THEN 1006
-            ELSE NULL
-        END as ramal,
-        "name"
-    FROM users
-    WHERE id IN (14164344, 14164336, 12476067)
-)
-SELECT
-    a4c."name",
-    kc.id,
-    kc.ramal,
-    kc.atendente,
-    kc.atendido_em,
-    kc.finalizado_em,
-    kc.duration,
-    kc.causa_desligamento,
-    kc.url_gravacao,
-    kc.created_at
-FROM kommo_calls kc
-LEFT JOIN a4c ON a4c.ramal = kc.ramal
-WHERE kc.ramal IN (1006, 1011, 1012)
-    AND kc.atendido_em >= data_inicio
-    AND kc.atendido_em <= data_fim
-ORDER BY kc.atendido_em DESC;
-$$ LANGUAGE SQL;
-            """, language="sql")
 
 # Footer
 st.markdown("---")
