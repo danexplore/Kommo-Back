@@ -1157,9 +1157,13 @@ with tab5:
             if etapas_selecionadas:
                 df_tempo_filtrado = df_tempo[df_tempo['Etapa'].isin(etapas_selecionadas)].copy()
                 
-                # Ordenar por tempo médio decrescente
+                # Converter tempo de horas para dias
                 if 'Tempo Médio (horas)' in df_tempo_filtrado.columns:
-                    df_tempo_filtrado = df_tempo_filtrado.sort_values('Tempo Médio (horas)', ascending=False)
+                    df_tempo_filtrado['Tempo Médio (dias)'] = df_tempo_filtrado['Tempo Médio (horas)'] / 24
+                
+                # Ordenar por tempo médio decrescente
+                if 'Tempo Médio (dias)' in df_tempo_filtrado.columns:
+                    df_tempo_filtrado = df_tempo_filtrado.sort_values('Tempo Médio (dias)', ascending=False)
                 
                 st.markdown("")
                 
@@ -1167,14 +1171,14 @@ with tab5:
                 col_chart, col_table = st.columns([2, 1])
                 
                 with col_chart:
-                    if 'Tempo Médio (horas)' in df_tempo_filtrado.columns:
+                    if 'Tempo Médio (dias)' in df_tempo_filtrado.columns:
                         fig = px.bar(
                             df_tempo_filtrado,
                             x='Etapa',
-                            y='Tempo Médio (horas)',
+                            y='Tempo Médio (dias)',
                             title='Tempo Médio por Etapa',
-                            labels={'Etapa': 'Etapa do Funil', 'Tempo Médio (horas)': 'Horas'},
-                            color='Tempo Médio (horas)',
+                            labels={'Etapa': 'Etapa do Funil', 'Tempo Médio (dias)': 'Dias'},
+                            color='Tempo Médio (dias)',
                             color_continuous_scale='Blues'
                         )
                         fig.update_layout(height=400, xaxis_tickangle=-45)
@@ -1184,16 +1188,16 @@ with tab5:
                     st.markdown("**Ranking de Etapas**")
                     
                     # Criar ranking
-                    df_ranking = df_tempo_filtrado[['Etapa', 'Tempo Médio (horas)']].copy()
+                    df_ranking = df_tempo_filtrado[['Etapa', 'Tempo Médio (dias)']].copy()
                     df_ranking['Ranking'] = range(1, len(df_ranking) + 1)
-                    df_ranking = df_ranking[['Ranking', 'Etapa', 'Tempo Médio (horas)']]
+                    df_ranking = df_ranking[['Ranking', 'Etapa', 'Tempo Médio (dias)']]
                     
                     st.dataframe(
                         df_ranking,
                         column_config={
                             "Ranking": st.column_config.NumberColumn("Pos", format="%d"),
                             "Etapa": st.column_config.TextColumn("Etapa", width="medium"),
-                            "Tempo Médio (horas)": st.column_config.NumberColumn("Horas", format="%.1f")
+                            "Tempo Médio (dias)": st.column_config.NumberColumn("Dias", format="%.1f")
                         },
                         hide_index=True,
                         width='stretch',
@@ -1204,16 +1208,20 @@ with tab5:
                 
                 # Tabela detalhada
                 st.markdown("#### 📊 Dados Completos")
+                
+                # Preparar dataframe para exibição com colunas úteis
+                df_exibicao = df_tempo_filtrado[['ID Status', 'Etapa', 'Tempo Médio (dias)']].copy() if 'ID Status' in df_tempo_filtrado.columns else df_tempo_filtrado[['Etapa', 'Tempo Médio (dias)']].copy()
+                
                 st.dataframe(
-                    df_tempo_filtrado,
+                    df_exibicao,
                     column_config={
                         "ID Status": st.column_config.NumberColumn("ID", format="%d"),
                         "Etapa": st.column_config.TextColumn("Etapa"),
-                        "Tempo Médio (horas)": st.column_config.NumberColumn("Tempo (horas)", format="%.2f")
+                        "Tempo Médio (dias)": st.column_config.NumberColumn("Tempo (dias)", format="%.1f")
                     },
                     hide_index=True,
                     width='stretch',
-                    height=min(500, len(df_tempo_filtrado) * 35 + 100)
+                    height=min(500, len(df_exibicao) * 35 + 100)
                 )
             else:
                 st.info("Selecione pelo menos uma etapa para visualizar")
@@ -1289,18 +1297,44 @@ with tab6:
                 df_vendedores['Duração Total (minutos)'] = df_vendedores['Duração Total (minutos)'].round(0)
                 df_vendedores = df_vendedores.sort_values('Total de Chamadas', ascending=False)
                 
-                # Gráfico de barras
-                fig_vendedores = px.bar(
-                    df_vendedores,
-                    x='Vendedor',
-                    y='Total de Chamadas',
-                    title='Quantidade de Chamadas por Vendedor',
-                    labels={'Vendedor': 'Vendedor', 'Total de Chamadas': 'Quantidade'},
-                    color='Total de Chamadas',
-                    color_continuous_scale='Viridis'
-                )
-                fig_vendedores.update_layout(height=400, xaxis_tickangle=-45)
-                st.plotly_chart(fig_vendedores, use_container_width=True)
+                # Gráfico de barras - Total de Chamadas
+                col_chart1, col_chart2 = st.columns(2)
+                
+                with col_chart1:
+                    fig_vendedores = px.bar(
+                        df_vendedores,
+                        x='Vendedor',
+                        y='Total de Chamadas',
+                        title='Total de Chamadas por Vendedor',
+                        labels={'Vendedor': 'Vendedor', 'Total de Chamadas': 'Quantidade'},
+                        color='Total de Chamadas',
+                        color_continuous_scale='Viridis'
+                    )
+                    fig_vendedores.update_layout(height=400, xaxis_tickangle=-45)
+                    st.plotly_chart(fig_vendedores, use_container_width=True)
+                
+                with col_chart2:
+                    # Gráfico de ligações por dia
+                    if 'atendido_em' in df_chamadas.columns:
+                        df_chamadas_copy = df_chamadas.copy()
+                        df_chamadas_copy['atendido_em'] = pd.to_datetime(df_chamadas_copy['atendido_em'])
+                        df_chamadas_copy['data'] = df_chamadas_copy['atendido_em'].dt.date
+                        
+                        df_por_dia = df_chamadas_copy.groupby(['name', 'data']).size().reset_index(name='chamadas')
+                        df_por_dia.columns = ['Vendedor', 'Data', 'Chamadas']
+                        df_por_dia['Data'] = pd.to_datetime(df_por_dia['Data']).dt.strftime('%d/%m')
+                        
+                        fig_por_dia = px.line(
+                            df_por_dia,
+                            x='Data',
+                            y='Chamadas',
+                            color='Vendedor',
+                            title='Ligações por Dia (Comparação)',
+                            labels={'Data': 'Data', 'Chamadas': 'Quantidade'},
+                            markers=True
+                        )
+                        fig_por_dia.update_layout(height=400, hovermode='x unified')
+                        st.plotly_chart(fig_por_dia, use_container_width=True)
                 
                 # Tabela de vendedores
                 st.dataframe(
@@ -1378,22 +1412,6 @@ with tab6:
             )
             
             st.markdown("")
-            
-            # Estatísticas adicionais
-            st.markdown("#### 📈 Análise de Motivos de Desligamento")
-            
-            if 'Motivo' in df_relatorio.columns:
-                df_motivos = df_relatorio['Motivo'].value_counts().reset_index()
-                df_motivos.columns = ['Motivo', 'Quantidade']
-                
-                fig_motivos = px.pie(
-                    df_motivos,
-                    values='Quantidade',
-                    names='Motivo',
-                    title='Distribuição de Motivos de Desligamento'
-                )
-                fig_motivos.update_layout(height=400)
-                st.plotly_chart(fig_motivos, use_container_width=True)
         else:
             st.info("Nenhuma chamada encontrada para os vendedores selecionados no período.")
     else:
