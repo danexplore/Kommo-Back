@@ -1,0 +1,12 @@
+.env
+.vscode
+.venv
+*__pycache__*
+testes.*
+teste*
+*xlsx
+.vercel
+null_tenants*
+*.pyc
+*.ipynb
+.streamlit/secrets.toml
