@@ -7,8 +7,8 @@ import plotly.express as px
 
 # Configuração da página
 st.set_page_config(
-    page_title="Painel de Acompanhamento de Leads - Kommo",
-    page_icon="📊",
+    page_title="Painel de Acompanhamento de Leads - ecosys AUTO",
+    page_icon="🚗",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -54,18 +54,18 @@ def init_supabase():
 
 supabase: Client = init_supabase()
 
-# CSS customizado - Dark Mode sofisticado
+# CSS customizado - ecosys AUTO Branding
 st.markdown("""
     <style>
-    /* Background geral */
+    /* Background geral - tons escuros com cinza */
     .stApp {
-        background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+        background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);
     }
     
     /* Main */
     .main {
         padding: 2rem 1.5rem;
-        background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+        background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);
     }
     
     /* Texto base */
@@ -73,18 +73,18 @@ st.markdown("""
         color: #ffffff;
     }
     
-    /* Títulos */
+    /* Títulos - Teal ecosys AUTO */
     h1 {
         font-weight: 800;
-        color: #00d4ff;
-        text-shadow: 0 2px 10px rgba(0, 212, 255, 0.3);
+        color: #20B2AA;
+        text-shadow: 0 2px 10px rgba(32, 178, 170, 0.3);
         font-size: 2.5rem;
         margin-bottom: 0.5rem;
     }
     
     h2 {
         font-weight: 700;
-        color: #00d4ff;
+        color: #20B2AA;
         font-size: 1.8rem;
         margin-top: 2rem;
         margin-bottom: 1rem;
@@ -92,57 +92,57 @@ st.markdown("""
     
     h3 {
         font-weight: 600;
-        color: #00d4ff;
+        color: #20B2AA;
         font-size: 1.3rem;
     }
     
     /* Dividers */
     hr, .stDivider {
-        border-color: rgba(0, 212, 255, 0.2);
+        border-color: rgba(32, 178, 170, 0.2);
     }
     
-    /* Métricas */
+    /* Métricas - Teal e Silver */
     div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, rgba(26, 31, 58, 0.8) 0%, rgba(15, 20, 40, 0.8) 100%);
+        background: linear-gradient(135deg, rgba(45, 55, 72, 0.8) 0%, rgba(26, 31, 46, 0.8) 100%);
         padding: 1.5rem;
         border-radius: 12px;
-        border: 1px solid rgba(0, 212, 255, 0.2);
-        box-shadow: 0 8px 32px 0 rgba(0, 212, 255, 0.1);
+        border: 1px solid rgba(32, 178, 170, 0.3);
+        box-shadow: 0 8px 32px 0 rgba(32, 178, 170, 0.15);
     }
     
     div[data-testid="stMetricValue"] {
         font-size: 2.5rem;
         font-weight: 800;
-        color: #00d4ff;
-        text-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
+        color: #20B2AA;
+        text-shadow: 0 2px 8px rgba(32, 178, 170, 0.3);
     }
     
     div[data-testid="stMetricLabel"] {
         font-size: 0.95rem;
         font-weight: 600;
-        color: #ffffff;
+        color: #CBD5E0;
     }
     
     div[data-testid="stMetricDelta"] {
         font-size: 0.9rem;
-        color: #00d4ff;
+        color: #20B2AA;
     }
     
-    /* Tabelas */
+    /* Tabelas - Silver e Teal */
     .stDataFrame {
-        background: linear-gradient(135deg, rgba(26, 31, 58, 0.95) 0%, rgba(15, 20, 40, 0.95) 100%) !important;
+        background: linear-gradient(135deg, rgba(45, 55, 72, 0.95) 0%, rgba(26, 31, 46, 0.95) 100%) !important;
         border-radius: 12px;
-        border: 2px solid rgba(0, 212, 255, 0.25) !important;
-        box-shadow: 0 8px 32px 0 rgba(0, 212, 255, 0.1);
+        border: 2px solid rgba(32, 178, 170, 0.3) !important;
+        box-shadow: 0 8px 32px 0 rgba(32, 178, 170, 0.15);
         overflow: hidden;
     }
     
     .stDataFrame th {
-        background: linear-gradient(135deg, rgba(0, 212, 255, 0.25) 0%, rgba(0, 180, 220, 0.15) 100%) !important;
-        color: #00ffff !important;
+        background: linear-gradient(135deg, rgba(32, 178, 170, 0.25) 0%, rgba(0, 139, 139, 0.15) 100%) !important;
+        color: #C0C0C0 !important;
         font-weight: 700;
         border: none !important;
-        border-bottom: 2px solid rgba(0, 212, 255, 0.3) !important;
+        border-bottom: 2px solid rgba(32, 178, 170, 0.3) !important;
         padding: 12px !important;
         text-transform: uppercase;
         font-size: 12px;
@@ -150,10 +150,10 @@ st.markdown("""
     }
     
     .stDataFrame td {
-        border-color: rgba(0, 212, 255, 0.15) !important;
+        border-color: rgba(32, 178, 170, 0.15) !important;
         color: #ffffff !important;
         padding: 10px 12px !important;
-        border-bottom: 1px solid rgba(0, 212, 255, 0.08) !important;
+        border-bottom: 1px solid rgba(32, 178, 170, 0.08) !important;
     }
     
     .stDataFrame tr {
@@ -161,24 +161,24 @@ st.markdown("""
     }
     
     .stDataFrame tbody tr:hover {
-        background-color: rgba(0, 212, 255, 0.08) !important;
-        border-left: 3px solid #00d4ff !important;
+        background-color: rgba(32, 178, 170, 0.12) !important;
+        border-left: 3px solid #20B2AA !important;
     }
     
     .stDataFrame tbody tr:nth-child(even) {
-        background-color: rgba(0, 212, 255, 0.02) !important;
+        background-color: rgba(32, 178, 170, 0.03) !important;
     }
     
     /* Alertas */
     .stAlert {
-        background: linear-gradient(135deg, rgba(26, 31, 58, 0.9) 0%, rgba(15, 20, 40, 0.9) 100%);
+        background: linear-gradient(135deg, rgba(45, 55, 72, 0.9) 0%, rgba(26, 31, 46, 0.9) 100%);
         border-radius: 12px;
-        border: 1px solid rgba(0, 212, 255, 0.3);
+        border: 1px solid rgba(32, 178, 170, 0.3);
         color: #ffffff;
     }
     
     .stAlert-info {
-        border-left: 4px solid #00d4ff;
+        border-left: 4px solid #20B2AA;
     }
     
     .stAlert-warning {
@@ -190,41 +190,41 @@ st.markdown("""
     }
     
     .stAlert-success {
-        border-left: 4px solid #00ff88;
+        border-left: 4px solid #48bb78;
     }
     
     /* Abas */
     .stTabs [data-baseweb="tab-list"] {
         gap: 12px;
-        border-bottom: 2px solid rgba(0, 212, 255, 0.1);
+        border-bottom: 2px solid rgba(32, 178, 170, 0.15);
     }
     
     .stTabs [data-baseweb="tab"] {
         height: 55px;
         padding: 0 28px;
-        background-color: rgba(26, 31, 58, 0.6);
+        background-color: rgba(45, 55, 72, 0.6);
         border-radius: 12px 12px 0 0;
         font-weight: 600;
-        color: #b0b0b0;
-        border: 1px solid rgba(0, 212, 255, 0.1);
+        color: #CBD5E0;
+        border: 1px solid rgba(32, 178, 170, 0.15);
     }
     
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 180, 220, 0.1) 100%);
-        color: #00d4ff;
-        border: 2px solid #00d4ff;
+        background: linear-gradient(135deg, rgba(32, 178, 170, 0.2) 0%, rgba(0, 139, 139, 0.1) 100%);
+        color: #20B2AA;
+        border: 2px solid #20B2AA;
         border-bottom: none;
-        box-shadow: 0 -4px 12px rgba(0, 212, 255, 0.15);
+        box-shadow: 0 -4px 12px rgba(32, 178, 170, 0.2);
     }
     
     .stTabs [aria-selected="false"]:hover {
-        background-color: rgba(0, 212, 255, 0.1);
+        background-color: rgba(32, 178, 170, 0.12);
         color: #ffffff;
     }
     
-    /* Sidebar */
+    /* Sidebar - ecosys AUTO */
     section[data-testid="stSidebar"] {
-        background: linear-gradient(135deg, #0f1428 0%, #1a1f3a 100%);
+        background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);
     }
     
     section[data-testid="stSidebar"] * {
@@ -234,58 +234,58 @@ st.markdown("""
     section[data-testid="stSidebar"] h1,
     section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] h3 {
-        color: #00d4ff;
+        color: #20B2AA;
     }
     
     section[data-testid="stSidebar"] label {
-        color: #ffffff;
+        color: #CBD5E0;
         font-weight: 500;
     }
     
     section[data-testid="stSidebar"] .stSelectbox > div > div,
     section[data-testid="stSidebar"] .stMultiSelect > div > div {
-        background-color: rgba(0, 212, 255, 0.08);
-        border-color: rgba(0, 212, 255, 0.2);
+        background-color: rgba(32, 178, 170, 0.08);
+        border-color: rgba(32, 178, 170, 0.25);
         border-radius: 8px;
     }
     
     section[data-testid="stSidebar"] input,
     section[data-testid="stSidebar"] select {
-        background-color: rgba(0, 212, 255, 0.08) !important;
+        background-color: rgba(32, 178, 170, 0.08) !important;
         color: #ffffff !important;
-        border-color: rgba(0, 212, 255, 0.2) !important;
+        border-color: rgba(32, 178, 170, 0.25) !important;
         border-radius: 8px !important;
     }
     
     section[data-testid="stSidebar"] button {
-        background: linear-gradient(135deg, #00d4ff 0%, #00a8cc 100%);
-        color: #0a0e27;
+        background: linear-gradient(135deg, #20B2AA 0%, #008B8B 100%);
+        color: #ffffff;
         border: none;
         font-weight: 600;
         border-radius: 8px;
     }
     
     section[data-testid="stSidebar"] button:hover {
-        background: linear-gradient(135deg, #00ffff 0%, #00d4ff 100%);
-        box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+        background: linear-gradient(135deg, #48D1CC 0%, #20B2AA 100%);
+        box-shadow: 0 4px 12px rgba(32, 178, 170, 0.3);
     }
     
     section[data-testid="stSidebar"] .stInfo, 
     section[data-testid="stSidebar"] .stWarning,
     section[data-testid="stSidebar"] .stError {
-        background-color: rgba(0, 212, 255, 0.1);
-        border-color: rgba(0, 212, 255, 0.3);
+        background-color: rgba(32, 178, 170, 0.1);
+        border-color: rgba(32, 178, 170, 0.3);
     }
     
     /* Links */
     a {
-        color: #00d4ff;
+        color: #20B2AA;
         text-decoration: none;
         font-weight: 600;
     }
     
     a:hover {
-        color: #00ffff;
+        color: #48D1CC;
         text-decoration: underline;
     }
     
@@ -293,31 +293,31 @@ st.markdown("""
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stDateInput > div > div > input {
-        background-color: rgba(0, 212, 255, 0.08) !important;
+        background-color: rgba(32, 178, 170, 0.08) !important;
         color: #ffffff !important;
-        border-color: rgba(0, 212, 255, 0.2) !important;
+        border-color: rgba(32, 178, 170, 0.25) !important;
         border-radius: 8px !important;
     }
     
     .stTextInput > div > div > input::placeholder,
     .stNumberInput > div > div > input::placeholder {
-        color: rgba(255, 255, 255, 0.5) !important;
+        color: rgba(203, 213, 224, 0.6) !important;
     }
     
     /* Checkbox */
     .stCheckbox > label {
-        color: #ffffff;
+        color: #CBD5E0;
     }
     
     /* Caption */
     .caption {
-        color: #a0a0a0;
+        color: #CBD5E0;
     }
     
     /* Gradiente de destaque para cards */
     .metric-card {
-        background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 150, 180, 0.05) 100%);
-        border-left: 4px solid #00d4ff;
+        background: linear-gradient(135deg, rgba(32, 178, 170, 0.15) 0%, rgba(0, 139, 139, 0.08) 100%);
+        border-left: 4px solid #20B2AA;
         border-radius: 12px;
         padding: 1.5rem;
     }
@@ -380,7 +380,7 @@ def format_dataframe_with_links(df, id_column='id', name_column='lead_name'):
     return df_display
 
 # Header
-st.title("📊 Painel de Acompanhamento de Leads - Kommo")
+st.title("🚗 Painel de Acompanhamento de Leads - ecosys AUTO")
 st.markdown("---")
 
 # Sidebar - Filtros Globais
