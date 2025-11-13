@@ -529,7 +529,11 @@ with col1:
 
 with col2:
     leads_com_demo = len(df_leads[df_leads['data_demo'].notna()])
-    st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."))
+    if total_leads > 0:
+        pct_com_demo = (leads_com_demo / total_leads) * 100
+        st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta=f"{pct_com_demo:.1f}%")
+    else:
+        st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta="0%")
 
 with col3:
     leads_atencao_count = len(df_leads[
@@ -557,11 +561,13 @@ st.markdown("---")
 # ========================================
 # ABAS PRINCIPAIS
 # ========================================
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🚨 Leads com Atenção", 
     "📆 Demos de Hoje",
     "📅 Resumo Diário",
-    "🔍 Detalhes dos Leads"
+    "🔍 Detalhes dos Leads",
+    "⏱️ Tempo por Etapa",
+    "📞 Produtividade do Vendedor"
 ])
 
 # ========================================
@@ -648,6 +654,48 @@ def get_all_leads_for_summary(data_inicio: datetime, data_fim: datetime, vendedo
     except Exception as e:
         return pd.DataFrame()
 
+# Função para buscar tempo médio por etapa
+@st.cache_data(ttl=1800)
+def get_tempo_por_etapa():
+    """Busca o tempo médio que leads ficam em cada etapa"""
+    try:
+        # Executar query SQL para obter tempo médio por status
+        response = supabase.rpc('get_tempo_por_etapa').execute()
+        
+        if response.data:
+            df = pd.DataFrame(response.data)
+            return df
+        else:
+            return pd.DataFrame()
+            
+    except Exception as e:
+        # Se a função RPC não existir, retornar DataFrame vazio
+        return pd.DataFrame()
+
+# Função para buscar dados de chamadas dos vendedores
+@st.cache_data(ttl=1800)
+def get_chamadas_vendedores(data_inicio, data_fim):
+    """Busca dados de chamadas dos vendedores no período"""
+    try:
+        # Query para buscar chamadas com informações do vendedor
+        response = supabase.rpc('get_chamadas_vendedores', {
+            'data_inicio': data_inicio.isoformat(),
+            'data_fim': data_fim.isoformat()
+        }).execute()
+        
+        if response.data:
+            df = pd.DataFrame(response.data)
+            # Converter duration de segundos para minutos
+            if 'duration' in df.columns:
+                df['duration_minutos'] = df['duration'] / 60
+            return df
+        else:
+            return pd.DataFrame()
+            
+    except Exception as e:
+        # Se a função RPC não existir, retornar DataFrame vazio
+        return pd.DataFrame()
+
 df_all_leads = get_all_leads_for_summary(
     datetime.combine(data_inicio, datetime.min.time()),
     datetime.combine(data_fim, datetime.max.time()),
@@ -719,7 +767,13 @@ for data in date_range:
         ])
     else:
         demos_realizadas = 0
+        
+    # Percentual de demos realizadas em relação ao total de demos agendadas no dia
+    porcentagem_demos = (demos_realizadas / demos_dia * 100) if demos_dia > 0 else 0
     
+    # Percentual de noshow em relação ao total de demos agendadas no dia
+    porcentagem_noshow = (noshow / demos_dia * 100) if demos_dia > 0 else 0
+        
     resumo_daily.append({
         'Data': data_date,
         'Dia': data.strftime('%A').lower(),
@@ -727,7 +781,9 @@ for data in date_range:
         'Agendamentos': agendamentos,
         'Demos no Dia': demos_dia,
         'Noshow': noshow,
-        'Demos Realizadas': demos_realizadas
+        'Demos Realizadas': demos_realizadas,
+        'Porcentagem Demos': porcentagem_demos,
+        '% Noshow': porcentagem_noshow,
     })
 
 df_resumo = pd.DataFrame(resumo_daily)
@@ -759,7 +815,9 @@ total_row = {
     'Agendamentos': df_resumo['Agendamentos'].sum(),
     'Demos no Dia': df_resumo['Demos no Dia'].sum(),
     'Noshow': df_resumo['Noshow'].sum(),
-    'Demos Realizadas': df_resumo['Demos Realizadas'].sum()
+    'Demos Realizadas': df_resumo['Demos Realizadas'].sum(),
+    'Porcentagem Demos': (df_resumo['Demos Realizadas'].sum() / df_resumo['Demos no Dia'].sum() * 100) if df_resumo['Demos no Dia'].sum() > 0 else 0,
+    '% Noshow': (df_resumo['Noshow'].sum() / df_resumo['Demos no Dia'].sum() * 100) if df_resumo['Demos no Dia'].sum() > 0 else 0
 }
 df_resumo_display = pd.concat([df_resumo_display, pd.DataFrame([total_row])], ignore_index=True)
 
@@ -891,6 +949,8 @@ with tab3:
                 "Demos no Dia": st.column_config.NumberColumn("Demos no Dia", format="%d"),
                 "Noshow": st.column_config.NumberColumn("Noshow", format="%d"),
                 "Demos Realizadas": st.column_config.NumberColumn("Demos Realizadas", format="%d"),
+                "Porcentagem Demos": st.column_config.NumberColumn("% Realizadas", format="%.1f%%"),
+                "% Noshow": st.column_config.NumberColumn("% Noshow", format="%.1f%%"),
             },
             height=min(500, len(df_resumo_display) * 35 + 100)
         )
@@ -1057,6 +1117,338 @@ with tab4:
         )
     else:
         st.info("Nenhum lead encontrado com o termo pesquisado.")
+
+# ========================================
+# ABA 5: TEMPO POR ETAPA
+# ========================================
+with tab5:
+    st.markdown("### ⏱️ Tempo Médio por Etapa")
+    st.caption("Visualize quanto tempo os leads ficam em média em cada etapa do funil")
+    
+    # Buscar dados de tempo por etapa
+    df_tempo = get_tempo_por_etapa()
+    
+    if not df_tempo.empty:
+        # Renomear colunas se necessário
+        if 'status_name' in df_tempo.columns:
+            df_tempo = df_tempo.rename(columns={
+                'status_name': 'Etapa',
+                'media_tempo_horas': 'Tempo Médio (horas)',
+                'status_id': 'ID Status'
+            })
+        
+        # Selecionar quais status exibir
+        if 'Etapa' in df_tempo.columns:
+            # Filtrar apenas status que possuem leads (removendo valores nulos e vazios)
+            df_tempo = df_tempo[df_tempo['Etapa'].notna() & (df_tempo['Etapa'] != '')]
+            etapas_disponiveis = sorted(df_tempo['Etapa'].unique().tolist())
+            
+            col_filter1, col_filter2 = st.columns([1, 3])
+            
+            with col_filter1:
+                st.write("**Filtrar Etapas:**")
+                etapas_selecionadas = st.multiselect(
+                    "Selecione as etapas",
+                    options=etapas_disponiveis,
+                    default=etapas_disponiveis[:10] if len(etapas_disponiveis) > 10 else etapas_disponiveis,
+                    key="etapas_filter"
+                )
+            
+            if etapas_selecionadas:
+                df_tempo_filtrado = df_tempo[df_tempo['Etapa'].isin(etapas_selecionadas)].copy()
+                
+                # Ordenar por tempo médio decrescente
+                if 'Tempo Médio (horas)' in df_tempo_filtrado.columns:
+                    df_tempo_filtrado = df_tempo_filtrado.sort_values('Tempo Médio (horas)', ascending=False)
+                
+                st.markdown("")
+                
+                # Exibir gráfico de barras
+                col_chart, col_table = st.columns([2, 1])
+                
+                with col_chart:
+                    if 'Tempo Médio (horas)' in df_tempo_filtrado.columns:
+                        fig = px.bar(
+                            df_tempo_filtrado,
+                            x='Etapa',
+                            y='Tempo Médio (horas)',
+                            title='Tempo Médio por Etapa',
+                            labels={'Etapa': 'Etapa do Funil', 'Tempo Médio (horas)': 'Horas'},
+                            color='Tempo Médio (horas)',
+                            color_continuous_scale='Blues'
+                        )
+                        fig.update_layout(height=400, xaxis_tickangle=-45)
+                        st.plotly_chart(fig, use_container_width=True, key="tempo_etapa_chart")
+                
+                with col_table:
+                    st.markdown("**Ranking de Etapas**")
+                    
+                    # Criar ranking
+                    df_ranking = df_tempo_filtrado[['Etapa', 'Tempo Médio (horas)']].copy()
+                    df_ranking['Ranking'] = range(1, len(df_ranking) + 1)
+                    df_ranking = df_ranking[['Ranking', 'Etapa', 'Tempo Médio (horas)']]
+                    
+                    st.dataframe(
+                        df_ranking,
+                        column_config={
+                            "Ranking": st.column_config.NumberColumn("Pos", format="%d"),
+                            "Etapa": st.column_config.TextColumn("Etapa", width="medium"),
+                            "Tempo Médio (horas)": st.column_config.NumberColumn("Horas", format="%.1f")
+                        },
+                        hide_index=True,
+                        width='stretch',
+                        height=min(400, len(df_ranking) * 35 + 100)
+                    )
+                
+                st.markdown("")
+                
+                # Tabela detalhada
+                st.markdown("#### 📊 Dados Completos")
+                st.dataframe(
+                    df_tempo_filtrado,
+                    column_config={
+                        "ID Status": st.column_config.NumberColumn("ID", format="%d"),
+                        "Etapa": st.column_config.TextColumn("Etapa"),
+                        "Tempo Médio (horas)": st.column_config.NumberColumn("Tempo (horas)", format="%.2f")
+                    },
+                    hide_index=True,
+                    width='stretch',
+                    height=min(500, len(df_tempo_filtrado) * 35 + 100)
+                )
+            else:
+                st.info("Selecione pelo menos uma etapa para visualizar")
+        else:
+            st.warning("Estrutura de dados inesperada. Verifique a query.")
+    else:
+        st.info("⚠️ Dados de tempo por etapa não disponíveis. Certifique-se de que a função RPC 'get_tempo_por_etapa' está configurada no banco de dados.")
+
+# ========================================
+# ABA 6: PRODUTIVIDADE DO VENDEDOR
+# ========================================
+with tab6:
+    st.markdown("### 📞 Produtividade do Vendedor")
+    st.caption("Análise de chamadas e desempenho dos vendedores")
+    
+    # Buscar dados de chamadas
+    df_chamadas = get_chamadas_vendedores(
+        datetime.combine(data_inicio, datetime.min.time()),
+        datetime.combine(data_fim, datetime.max.time())
+    )
+    
+    if not df_chamadas.empty:
+        # Filtrar por vendedores selecionados se houver
+        if vendedores_selecionados:
+            df_chamadas = df_chamadas[df_chamadas['name'].isin(vendedores_selecionados)]
+        
+        if not df_chamadas.empty:
+            # ========================================
+            # SEÇÃO 1: MÉTRICAS GERAIS
+            # ========================================
+            st.markdown("#### 📊 Métricas Gerais")
+            
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            
+            with col_m1:
+                total_chamadas = len(df_chamadas)
+                st.metric("☎️ Total de Chamadas", f"{total_chamadas:,}".replace(",", "."))
+            
+            with col_m2:
+                if 'duration_minutos' in df_chamadas.columns:
+                    tmd = df_chamadas['duration_minutos'].mean()
+                    st.metric("⏱️ TMD (Tempo Médio)", f"{tmd:.1f} min")
+                else:
+                    st.metric("⏱️ TMD (Tempo Médio)", "N/A")
+            
+            with col_m3:
+                duracao_total = df_chamadas['duration'].sum() / 60  # em minutos
+                horas_totais = duracao_total / 60  # em horas
+                if horas_totais < 1:
+                    st.metric("⏳ Duração Total", f"{duracao_total:.0f} min")
+                else:
+                    st.metric("⏳ Duração Total", f"{horas_totais:.1f}h")
+            
+            with col_m4:
+                vendedores_unicos = df_chamadas['name'].nunique() if 'name' in df_chamadas.columns else 0
+                st.metric("👥 Vendedores", f"{vendedores_unicos}")
+            
+            st.markdown("")
+            
+            # ========================================
+            # SEÇÃO 2: CHAMADAS POR VENDEDOR
+            # ========================================
+            st.markdown("#### 👥 Chamadas por Vendedor")
+            
+            if 'name' in df_chamadas.columns:
+                df_vendedores = df_chamadas.groupby('name').agg({
+                    'id': 'count',
+                    'duration_minutos': ['mean', 'sum']
+                }).reset_index()
+                
+                df_vendedores.columns = ['Vendedor', 'Total de Chamadas', 'TMD (minutos)', 'Duração Total (minutos)']
+                df_vendedores['TMD (minutos)'] = df_vendedores['TMD (minutos)'].round(2)
+                df_vendedores['Duração Total (minutos)'] = df_vendedores['Duração Total (minutos)'].round(0)
+                df_vendedores = df_vendedores.sort_values('Total de Chamadas', ascending=False)
+                
+                # Gráfico de barras
+                fig_vendedores = px.bar(
+                    df_vendedores,
+                    x='Vendedor',
+                    y='Total de Chamadas',
+                    title='Quantidade de Chamadas por Vendedor',
+                    labels={'Vendedor': 'Vendedor', 'Total de Chamadas': 'Quantidade'},
+                    color='Total de Chamadas',
+                    color_continuous_scale='Viridis'
+                )
+                fig_vendedores.update_layout(height=400, xaxis_tickangle=-45)
+                st.plotly_chart(fig_vendedores, use_container_width=True)
+                
+                # Tabela de vendedores
+                st.dataframe(
+                    df_vendedores,
+                    column_config={
+                        "Vendedor": st.column_config.TextColumn("Vendedor"),
+                        "Total de Chamadas": st.column_config.NumberColumn("Chamadas", format="%d"),
+                        "TMD (minutos)": st.column_config.NumberColumn("TMD (min)", format="%.2f"),
+                        "Duração Total (minutos)": st.column_config.NumberColumn("Total (min)", format="%.0f")
+                    },
+                    hide_index=True,
+                    width='stretch',
+                    height=min(300, len(df_vendedores) * 35 + 100)
+                )
+            
+            st.markdown("")
+            
+            # ========================================
+            # SEÇÃO 3: RELATÓRIO DETALHADO DE CHAMADAS
+            # ========================================
+            st.markdown("#### 📋 Relatório Detalhado de Chamadas")
+            
+            # Preparar dados para tabela
+            df_relatorio = df_chamadas.copy()
+            
+            # Renomear e formatar colunas
+            if 'name' in df_relatorio.columns:
+                df_relatorio = df_relatorio.rename(columns={
+                    'name': 'Vendedor',
+                    'atendente': 'Atendente',
+                    'atendido_em': 'Atendido em',
+                    'finalizado_em': 'Finalizado em',
+                    'duration_minutos': 'Duração (min)',
+                    'causa_desligamento': 'Motivo',
+                    'ramal': 'Ramal',
+                    'url_gravacao': 'Gravação'
+                })
+            
+            # Converter timestamps
+            if 'Atendido em' in df_relatorio.columns:
+                df_relatorio['Atendido em'] = pd.to_datetime(df_relatorio['Atendido em'])
+                df_relatorio['Atendido em'] = df_relatorio['Atendido em'].dt.strftime('%d/%m/%Y %H:%M')
+            
+            if 'Finalizado em' in df_relatorio.columns:
+                df_relatorio['Finalizado em'] = pd.to_datetime(df_relatorio['Finalizado em'])
+                df_relatorio['Finalizado em'] = df_relatorio['Finalizado em'].dt.strftime('%d/%m/%Y %H:%M')
+            
+            # Selecionar colunas para exibição
+            colunas_exibicao = [col for col in ['Vendedor', 'Atendente', 'Ramal', 'Atendido em', 'Duração (min)', 'Motivo', 'Gravação'] 
+                               if col in df_relatorio.columns]
+            df_relatorio_exibicao = df_relatorio[colunas_exibicao].copy()
+            
+            # Formatar coluna de duração
+            if 'Duração (min)' in df_relatorio_exibicao.columns:
+                df_relatorio_exibicao['Duração (min)'] = df_relatorio_exibicao['Duração (min)'].round(1)
+            
+            # Criar coluna com link da gravação
+            column_config_dict = {}
+            for col in df_relatorio_exibicao.columns:
+                if col == 'Gravação':
+                    column_config_dict[col] = st.column_config.LinkColumn("🔊 Gravação")
+                elif col == 'Duração (min)':
+                    column_config_dict[col] = st.column_config.NumberColumn("Duração (min)", format="%.1f")
+                elif col in ['Atendido em', 'Finalizado em']:
+                    column_config_dict[col] = st.column_config.TextColumn(col)
+                else:
+                    column_config_dict[col] = st.column_config.TextColumn(col)
+            
+            st.dataframe(
+                df_relatorio_exibicao.sort_values('Atendido em', ascending=False),
+                column_config=column_config_dict,
+                hide_index=True,
+                width='stretch',
+                height=min(600, len(df_relatorio_exibicao) * 35 + 100)
+            )
+            
+            st.markdown("")
+            
+            # Estatísticas adicionais
+            st.markdown("#### 📈 Análise de Motivos de Desligamento")
+            
+            if 'Motivo' in df_relatorio.columns:
+                df_motivos = df_relatorio['Motivo'].value_counts().reset_index()
+                df_motivos.columns = ['Motivo', 'Quantidade']
+                
+                fig_motivos = px.pie(
+                    df_motivos,
+                    values='Quantidade',
+                    names='Motivo',
+                    title='Distribuição de Motivos de Desligamento'
+                )
+                fig_motivos.update_layout(height=400)
+                st.plotly_chart(fig_motivos, use_container_width=True)
+        else:
+            st.info("Nenhuma chamada encontrada para os vendedores selecionados no período.")
+    else:
+        st.info("⚠️ Dados de chamadas não disponíveis. Certifique-se de que a função RPC 'get_chamadas_vendedores' está configurada no banco de dados.")
+        
+        with st.expander("ℹ️ Como configurar essa funcionalidade"):
+            st.code("""
+CREATE OR REPLACE FUNCTION get_chamadas_vendedores(
+    data_inicio TIMESTAMPTZ,
+    data_fim TIMESTAMPTZ
+)
+RETURNS TABLE (
+    name TEXT,
+    id TEXT,
+    ramal INTEGER,
+    atendente TEXT,
+    atendido_em TIMESTAMPTZ,
+    finalizado_em TIMESTAMPTZ,
+    duration FLOAT,
+    causa_desligamento TEXT,
+    url_gravacao TEXT,
+    created_at TIMESTAMPTZ
+) AS $$
+WITH a4c as (
+    SELECT
+        id,
+        CASE id
+            WHEN 14164344 THEN 1012
+            WHEN 14164336 THEN 1011
+            WHEN 12476067 THEN 1006
+            ELSE NULL
+        END as ramal,
+        "name"
+    FROM users
+    WHERE id IN (14164344, 14164336, 12476067)
+)
+SELECT
+    a4c."name",
+    kc.id,
+    kc.ramal,
+    kc.atendente,
+    kc.atendido_em,
+    kc.finalizado_em,
+    kc.duration,
+    kc.causa_desligamento,
+    kc.url_gravacao,
+    kc.created_at
+FROM kommo_calls kc
+LEFT JOIN a4c ON a4c.ramal = kc.ramal
+WHERE kc.ramal IN (1006, 1011, 1012)
+    AND kc.atendido_em >= data_inicio
+    AND kc.atendido_em <= data_fim
+ORDER BY kc.atendido_em DESC;
+$$ LANGUAGE SQL;
+            """, language="sql")
 
 # Footer
 st.markdown("---")
