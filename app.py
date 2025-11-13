@@ -568,13 +568,14 @@ st.markdown("---")
 # ========================================
 # ABAS PRINCIPAIS
 # ========================================
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🚨 Leads com Atenção", 
     "📆 Demos de Hoje",
     "📅 Resumo Diário",
     "🔍 Detalhes dos Leads",
     "⏱️ Tempo por Etapa",
-    "📞 Produtividade do Vendedor"
+    "📞 Produtividade do Vendedor",
+    "💰 Mural de Vendas"
 ])
 
 # ========================================
@@ -1423,6 +1424,295 @@ with tab6:
             st.info("Nenhuma chamada encontrada para os vendedores selecionados no período.")
     else:
         st.info("⚠️ Dados de chamadas não disponíveis. Certifique-se de que a função RPC 'get_chamadas_vendedores' está configurada no banco de dados.")
+
+# ========================================
+# ABA 7: MURAL DE VENDAS
+# ========================================
+with tab7:
+    st.markdown("### 💰 Mural de Vendas")
+    st.caption("Análise completa de vendas e desempenho comercial")
+    
+    # Filtrar apenas leads com venda
+    df_vendas = df_leads[df_leads['data_venda'].notna()].copy()
+    
+    # Filtrar por data de venda dentro do período
+    df_vendas = df_vendas[
+        (df_vendas['data_venda'].dt.date >= data_inicio) & 
+        (df_vendas['data_venda'].dt.date <= data_fim)
+    ]
+    
+    if not df_vendas.empty:
+        # ========================================
+        # SEÇÃO 1: MÉTRICAS GERAIS DE VENDAS
+        # ========================================
+        st.markdown("#### 📊 Métricas Gerais")
+        
+        col_v1, col_v2, col_v3, col_v4, col_v5 = st.columns(5)
+        
+        with col_v1:
+            total_vendas = len(df_vendas)
+            st.metric("💰 Total de Vendas", f"{total_vendas:,}".replace(",", "."))
+        
+        with col_v2:
+            # Calcular tempo médio de venda (da criação até a venda)
+            df_vendas['tempo_venda'] = (df_vendas['data_venda'] - df_vendas['criado_em']).dt.total_seconds() / 86400  # em dias
+            tempo_medio_venda = df_vendas['tempo_venda'].mean()
+            st.metric("⏱️ Tempo Médio de Venda", f"{tempo_medio_venda:.1f} dias")
+        
+        with col_v3:
+            # Taxa de conversão do período
+            total_leads_periodo = len(df_leads)
+            if total_leads_periodo > 0:
+                taxa_conversao_periodo = (total_vendas / total_leads_periodo) * 100
+                st.metric("📈 Taxa de Conversão", f"{taxa_conversao_periodo:.1f}%")
+            else:
+                st.metric("📈 Taxa de Conversão", "0%")
+        
+        with col_v4:
+            # Vendedor mais produtivo
+            if 'vendedor' in df_vendas.columns:
+                vendedor_top = df_vendas['vendedor'].value_counts().index[0] if len(df_vendas) > 0 else "N/A"
+                vendas_top = df_vendas['vendedor'].value_counts().iloc[0] if len(df_vendas) > 0 else 0
+                st.metric("🏆 Top Vendedor", vendedor_top if len(str(vendedor_top)) < 15 else str(vendedor_top)[:12] + "...")
+                st.caption(f"{vendas_top} vendas")
+        
+        with col_v5:
+            # Tempo mais rápido de venda
+            if 'tempo_venda' in df_vendas.columns:
+                tempo_min = df_vendas['tempo_venda'].min()
+                st.metric("⚡ Venda Mais Rápida", f"{tempo_min:.1f} dias")
+        
+        st.markdown("")
+        
+        # ========================================
+        # SEÇÃO 2: VENDAS POR VENDEDOR
+        # ========================================
+        st.markdown("#### 👥 Desempenho por Vendedor")
+        
+        if 'vendedor' in df_vendas.columns:
+            # Agregar dados por vendedor
+            df_vendedor_stats = df_vendas.groupby('vendedor').agg({
+                'id': 'count',
+                'tempo_venda': 'mean',
+                'criado_em': 'count'
+            }).reset_index()
+            
+            df_vendedor_stats.columns = ['Vendedor', 'Total Vendas', 'Tempo Médio (dias)', 'Leads']
+            df_vendedor_stats['Tempo Médio (dias)'] = df_vendedor_stats['Tempo Médio (dias)'].round(1)
+            df_vendedor_stats = df_vendedor_stats.sort_values('Total Vendas', ascending=False)
+            
+            # Calcular taxa de conversão por vendedor
+            vendas_por_vendedor = df_vendas.groupby('vendedor').size()
+            leads_por_vendedor = df_leads.groupby('vendedor').size()
+            
+            df_vendedor_stats['Taxa Conversão (%)'] = df_vendedor_stats['Vendedor'].apply(
+                lambda v: (vendas_por_vendedor.get(v, 0) / leads_por_vendedor.get(v, 1)) * 100 if leads_por_vendedor.get(v, 0) > 0 else 0
+            ).round(1)
+            
+            col_chart_v1, col_chart_v2 = st.columns(2)
+            
+            with col_chart_v1:
+                # Gráfico de barras - Vendas por vendedor
+                fig_vendas_vendedor = px.bar(
+                    df_vendedor_stats.head(10),
+                    x='Vendedor',
+                    y='Total Vendas',
+                    title='Top 10 Vendedores - Total de Vendas',
+                    labels={'Vendedor': 'Vendedor', 'Total Vendas': 'Quantidade'},
+                    color='Total Vendas',
+                    color_continuous_scale='Blues'
+                )
+                fig_vendas_vendedor.update_layout(height=400, xaxis_tickangle=-45)
+                st.plotly_chart(fig_vendas_vendedor, use_container_width=True)
+            
+            with col_chart_v2:
+                # Gráfico de barras - Taxa de conversão por vendedor
+                fig_conversao_vendedor = px.bar(
+                    df_vendedor_stats.head(10),
+                    x='Vendedor',
+                    y='Taxa Conversão (%)',
+                    title='Top 10 Vendedores - Taxa de Conversão',
+                    labels={'Vendedor': 'Vendedor', 'Taxa Conversão (%)': 'Taxa (%)'},
+                    color='Taxa Conversão (%)',
+                    color_continuous_scale='Greens'
+                )
+                fig_conversao_vendedor.update_layout(height=400, xaxis_tickangle=-45)
+                st.plotly_chart(fig_conversao_vendedor, use_container_width=True)
+            
+            # Tabela de desempenho
+            st.dataframe(
+                df_vendedor_stats,
+                column_config={
+                    "Vendedor": st.column_config.TextColumn("Vendedor"),
+                    "Total Vendas": st.column_config.NumberColumn("Vendas", format="%d"),
+                    "Tempo Médio (dias)": st.column_config.NumberColumn("Tempo Médio", format="%.1f"),
+                    "Taxa Conversão (%)": st.column_config.NumberColumn("Taxa Conversão", format="%.1f%%")
+                },
+                hide_index=True,
+                width='stretch',
+                height=min(400, len(df_vendedor_stats) * 35 + 100)
+            )
+        
+        st.markdown("")
+        
+        # ========================================
+        # SEÇÃO 3: HISTÓRICO DE VENDAS
+        # ========================================
+        st.markdown("#### 📈 Histórico de Vendas")
+        
+        # Vendas por dia
+        df_vendas['data_venda_formatada'] = df_vendas['data_venda'].dt.date
+        df_vendas_dia = df_vendas.groupby('data_venda_formatada').size().reset_index(name='vendas')
+        df_vendas_dia['data_venda_formatada'] = pd.to_datetime(df_vendas_dia['data_venda_formatada'])
+        df_vendas_dia = df_vendas_dia.sort_values('data_venda_formatada')
+        df_vendas_dia['Data'] = df_vendas_dia['data_venda_formatada'].dt.strftime('%d/%m')
+        
+        col_hist1, col_hist2 = st.columns([2, 1])
+        
+        with col_hist1:
+            # Gráfico de linha - Vendas ao longo do tempo
+            fig_historico = px.line(
+                df_vendas_dia,
+                x='Data',
+                y='vendas',
+                title='Evolução de Vendas no Período',
+                labels={'Data': 'Data', 'vendas': 'Quantidade de Vendas'},
+                markers=True
+            )
+            fig_historico.update_traces(line_color='#4A9FFF', line_width=3)
+            fig_historico.update_layout(height=400, hovermode='x unified')
+            st.plotly_chart(fig_historico, use_container_width=True)
+        
+        with col_hist2:
+            st.markdown("**Estatísticas do Período**")
+            
+            # Calcular estatísticas
+            media_vendas_dia = df_vendas_dia['vendas'].mean()
+            max_vendas_dia = df_vendas_dia['vendas'].max()
+            min_vendas_dia = df_vendas_dia['vendas'].min()
+            
+            st.metric("📊 Média por Dia", f"{media_vendas_dia:.1f}")
+            st.metric("📈 Melhor Dia", f"{int(max_vendas_dia)}")
+            st.metric("📉 Pior Dia", f"{int(min_vendas_dia)}")
+        
+        st.markdown("")
+        
+        # ========================================
+        # SEÇÃO 4: INSIGHTS DE VENDAS
+        # ========================================
+        st.markdown("#### 💡 Insights e Análises")
+        
+        col_ins1, col_ins2 = st.columns(2)
+        
+        with col_ins1:
+            st.markdown("**🔍 Distribuição por Dia da Semana**")
+            
+            # Vendas por dia da semana
+            df_vendas['dia_semana'] = df_vendas['data_venda'].dt.day_name()
+            dias_ordem = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+            
+            df_dia_semana = df_vendas['dia_semana'].value_counts().reindex(dias_ordem, fill_value=0).reset_index()
+            df_dia_semana.columns = ['dia', 'vendas']
+            df_dia_semana['dia'] = dias_pt
+            
+            fig_dia_semana = px.bar(
+                df_dia_semana,
+                x='dia',
+                y='vendas',
+                title='Vendas por Dia da Semana',
+                labels={'dia': 'Dia', 'vendas': 'Vendas'},
+                color='vendas',
+                color_continuous_scale='Blues'
+            )
+            fig_dia_semana.update_layout(height=350)
+            st.plotly_chart(fig_dia_semana, use_container_width=True)
+        
+        with col_ins2:
+            st.markdown("**📋 Distribuição por Pipeline**")
+            
+            if 'pipeline' in df_vendas.columns:
+                df_pipeline = df_vendas['pipeline'].value_counts().reset_index()
+                df_pipeline.columns = ['Pipeline', 'Vendas']
+                
+                fig_pipeline = px.pie(
+                    df_pipeline,
+                    values='Vendas',
+                    names='Pipeline',
+                    title='Vendas por Pipeline'
+                )
+                fig_pipeline.update_layout(height=350)
+                st.plotly_chart(fig_pipeline, use_container_width=True)
+        
+        st.markdown("")
+        
+        # ========================================
+        # SEÇÃO 5: ANÁLISE DE CICLO DE VENDA
+        # ========================================
+        st.markdown("#### ⏱️ Análise do Ciclo de Venda")
+        
+        col_ciclo1, col_ciclo2 = st.columns(2)
+        
+        with col_ciclo1:
+            # Distribuição do tempo de venda
+            fig_tempo_dist = px.histogram(
+                df_vendas,
+                x='tempo_venda',
+                nbins=20,
+                title='Distribuição do Tempo de Venda (em dias)',
+                labels={'tempo_venda': 'Dias até Venda', 'count': 'Quantidade'},
+                color_discrete_sequence=['#4A9FFF']
+            )
+            fig_tempo_dist.update_layout(height=350)
+            st.plotly_chart(fig_tempo_dist, use_container_width=True)
+        
+        with col_ciclo2:
+            st.markdown("**📊 Estatísticas de Tempo**")
+            
+            quartis = df_vendas['tempo_venda'].quantile([0.25, 0.5, 0.75])
+            
+            st.metric("25% das vendas em até", f"{quartis[0.25]:.1f} dias")
+            st.metric("50% das vendas em até", f"{quartis[0.5]:.1f} dias")
+            st.metric("75% das vendas em até", f"{quartis[0.75]:.1f} dias")
+        
+        st.markdown("")
+        
+        # ========================================
+        # SEÇÃO 6: TABELA DETALHADA DE VENDAS
+        # ========================================
+        st.markdown("#### 📋 Detalhes das Vendas")
+        
+        # Preparar tabela de vendas
+        df_vendas_table = df_vendas[['lead_name', 'vendedor', 'pipeline', 'criado_em', 'data_venda', 'tempo_venda']].copy()
+        df_vendas_table['criado_em'] = df_vendas_table['criado_em'].dt.strftime('%d/%m/%Y')
+        df_vendas_table['data_venda'] = df_vendas_table['data_venda'].dt.strftime('%d/%m/%Y')
+        df_vendas_table['tempo_venda'] = df_vendas_table['tempo_venda'].round(1)
+        df_vendas_table = df_vendas_table.rename(columns={
+            'lead_name': 'Lead',
+            'vendedor': 'Vendedor',
+            'pipeline': 'Pipeline',
+            'criado_em': 'Data Criação',
+            'data_venda': 'Data Venda',
+            'tempo_venda': 'Tempo (dias)'
+        })
+        
+        st.dataframe(
+            df_vendas_table.sort_values('Data Venda', ascending=False),
+            column_config={
+                "Lead": st.column_config.TextColumn("Lead"),
+                "Vendedor": st.column_config.TextColumn("Vendedor"),
+                "Pipeline": st.column_config.TextColumn("Pipeline"),
+                "Data Criação": st.column_config.TextColumn("Criado em"),
+                "Data Venda": st.column_config.TextColumn("Vendido em"),
+                "Tempo (dias)": st.column_config.NumberColumn("Ciclo (dias)", format="%.1f")
+            },
+            hide_index=True,
+            width='stretch',
+            height=min(500, len(df_vendas_table) * 35 + 100)
+        )
+    else:
+        st.info("📊 Nenhuma venda registrada no período selecionado.")
+        st.caption("Ajuste os filtros na barra lateral para visualizar vendas de outros períodos.")
 
 # Footer
 st.markdown("---")
