@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import os
 from supabase import create_client, Client
 import plotly.express as px
+from openai import OpenAI
 
 # Configuração da página
 st.set_page_config(
@@ -53,6 +54,19 @@ def init_supabase():
     return create_client(url, key)
 
 supabase: Client = init_supabase()
+
+# Configuração do OpenAI
+@st.cache_resource
+def init_openai():
+    """Inicializa cliente OpenAI"""
+    api_key = st.secrets["OPENAI_API_KEY"]
+    
+    if not api_key:
+        return None
+    
+    return OpenAI(api_key=api_key)
+
+openai_client = init_openai()
 
 # CSS customizado - ecosys AUTO Branding
 st.markdown("""
@@ -431,6 +445,120 @@ def format_dataframe_with_links(df, id_column='id', name_column='lead_name'):
     
     return df_display
 
+@st.cache_data(ttl=3600)  # Cache de 1 hora
+def gerar_insights_ia(metricas_atual, metricas_anterior, periodo_descricao):
+    """Gera insights usando IA da OpenAI"""
+    
+    if not openai_client:
+        return None
+    
+    try:
+        # Calcular variações
+        var_leads = metricas_atual['total_leads'] - metricas_anterior['total_leads']
+        var_leads_pct = ((metricas_atual['total_leads'] - metricas_anterior['total_leads']) / metricas_anterior['total_leads'] * 100) if metricas_anterior['total_leads'] > 0 else 0
+        
+        var_demo = metricas_atual['leads_com_demo'] - metricas_anterior['leads_com_demo']
+        var_demo_pct = ((metricas_atual['leads_com_demo'] - metricas_anterior['leads_com_demo']) / metricas_anterior['leads_com_demo'] * 100) if metricas_anterior['leads_com_demo'] > 0 else 0
+        
+        var_demos_real = metricas_atual['demos_realizadas'] - metricas_anterior['demos_realizadas']
+        var_demos_real_pct = ((metricas_atual['demos_realizadas'] - metricas_anterior['demos_realizadas']) / metricas_anterior['demos_realizadas'] * 100) if metricas_anterior['demos_realizadas'] > 0 else 0
+        
+        var_noshow = metricas_atual['noshow_count'] - metricas_anterior['noshow_count']
+        var_noshow_pct = ((metricas_atual['noshow_count'] - metricas_anterior['noshow_count']) / metricas_anterior['noshow_count'] * 100) if metricas_anterior['noshow_count'] > 0 else 0
+        
+        var_convertidos = metricas_atual['leads_convertidos'] - metricas_anterior['leads_convertidos']
+        var_convertidos_pct = ((metricas_atual['leads_convertidos'] - metricas_anterior['leads_convertidos']) / metricas_anterior['leads_convertidos'] * 100) if metricas_anterior['leads_convertidos'] > 0 else 0
+        
+        # Preparar dados para análise
+        prompt = f"""Você é um analista de dados especializado em vendas e CRM. Analise os seguintes dados de performance de leads e forneça insights acionáveis em português do Brasil.
+
+PERÍODO ANALISADO: {periodo_descricao}
+
+MÉTRICAS DO PERÍODO ATUAL:
+- Total de Leads: {metricas_atual['total_leads']}
+- Leads com Demo Agendada: {metricas_atual['leads_com_demo']} ({metricas_atual['pct_com_demo']:.1f}% dos leads)
+- Demos Realizadas: {metricas_atual['demos_realizadas']}
+- No-shows: {metricas_atual['noshow_count']}
+- Leads Convertidos: {metricas_atual['leads_convertidos']} ({metricas_atual['taxa_conversao']:.1f}% dos leads)
+
+COMPARAÇÃO COM PERÍODO ANTERIOR:
+- Total de Leads: {metricas_anterior['total_leads']} (Variação: {var_leads:+d}, {var_leads_pct:+.1f}%)
+- Leads com Demo: {metricas_anterior['leads_com_demo']} (Variação: {var_demo:+d}, {var_demo_pct:+.1f}%)
+- Demos Realizadas: {metricas_anterior['demos_realizadas']} (Variação: {var_demos_real:+d}, {var_demos_real_pct:+.1f}%)
+- No-shows: {metricas_anterior['noshow_count']} (Variação: {var_noshow:+d})
+- Convertidos: {metricas_anterior['leads_convertidos']} (Variação: {var_convertidos:+d}, {var_convertidos_pct:+.1f}%)
+
+Por favor, forneça:
+1. Um resumo executivo (2-3 frases) sobre a performance geral
+2. Identifique o principal gargalo no funil de vendas
+3. Liste 3 recomendações práticas e acionáveis para melhorar os resultados
+
+Utilize um markdown leve para formatação da resposta.
+Seja direto, objetivo e use linguagem de negócios. Foque em insights que gerem ação."""
+
+        response = openai_client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[
+                {"role": "system", "content": "Você é um analista de vendas experiente. Forneça insights diretos e acionáveis."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        return f"❌ **Erro ao gerar insights:** {str(e)}"
+
+def chat_com_dados(mensagem_usuario, metricas_atual, metricas_anterior, periodo_descricao, historico_chat):
+    """Realiza conversa com IA sobre os dados"""
+    
+    if not openai_client:
+        return "Erro: OpenAI não configurada"
+    
+    try:
+        # Preparar contexto dos dados
+        contexto_dados = f"""
+CONTEXTO DOS DADOS (Período: {periodo_descricao}):
+- Total de Leads: {metricas_atual['total_leads']} (variação: {metricas_atual['total_leads'] - metricas_anterior['total_leads']:+d})
+- Leads com Demo: {metricas_atual['leads_com_demo']} (variação: {metricas_atual['leads_com_demo'] - metricas_anterior['leads_com_demo']:+d})
+- Demos Realizadas: {metricas_atual['demos_realizadas']} (variação: {metricas_atual['demos_realizadas'] - metricas_anterior['demos_realizadas']:+d})
+- No-shows: {metricas_atual['noshow_count']} (variação: {metricas_atual['noshow_count'] - metricas_anterior['noshow_count']:+d})
+- Leads Convertidos: {metricas_atual['leads_convertidos']} ({metricas_atual['taxa_conversao']:.1f}%)
+- Leads com Demo Anterior: {metricas_anterior['leads_com_demo']}
+- Demos Realizadas Anterior: {metricas_anterior['demos_realizadas']}
+- No-shows Anterior: {metricas_anterior['noshow_count']}
+- Leads Convertidos Anterior: {metricas_anterior['leads_convertidos']}
+"""
+        
+        # Construir mensagens do histórico
+        mensagens = [
+            {"role": "system", "content": f"""Você é um assistente especializado em análise de vendas e CRM. 
+Você tem acesso aos dados atuais de performance de leads e pode responder perguntas sobre tendências, 
+recomendações e análises dos dados.
+
+{contexto_dados}
+
+Responda em português do Brasil, de forma conversacional e profissional."""}
+        ]
+        
+        # Adicionar histórico de chat
+        for msg_hist in historico_chat:
+            mensagens.append({"role": msg_hist["role"], "content": msg_hist["content"]})
+        
+        # Adicionar mensagem atual do usuário
+        mensagens.append({"role": "user", "content": mensagem_usuario})
+        
+        # Chamar API
+        response = openai_client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=mensagens
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        return f"Erro ao processar sua pergunta: {str(e)}"
+
 # Header
 st.title("🚗 Painel de Acompanhamento de Leads - ecosys AUTO")
 st.markdown("---")
@@ -576,31 +704,79 @@ if pipelines_selecionados:
 hoje = pd.Timestamp(datetime.now().date())
 
 # ========================================
+# BUSCAR DADOS DO MÊS ANTERIOR PARA COMPARAÇÃO
+# ========================================
+# Calcular período do mês anterior (mesmo intervalo de dias)
+dias_periodo = (data_fim - data_inicio).days
+data_inicio_anterior = data_inicio - timedelta(days=dias_periodo + 1)
+data_fim_anterior = data_fim - timedelta(days=dias_periodo + 1)
+
+# Buscar dados do período anterior
+with st.spinner("⏳ Calculando comparações..."):
+    df_leads_anterior = get_leads_data(
+        datetime.combine(data_inicio_anterior, datetime.min.time()),
+        datetime.combine(data_fim_anterior, datetime.max.time()),
+        None  # Sem filtro de vendedor para comparação geral
+    )
+    
+    # Aplicar mesmos filtros de vendedor e pipeline
+    if vendedores_selecionados and not df_leads_anterior.empty:
+        df_leads_anterior = df_leads_anterior[df_leads_anterior['vendedor'].isin(vendedores_selecionados)]
+    
+    if pipelines_selecionados and not df_leads_anterior.empty:
+        df_leads_anterior = df_leads_anterior[df_leads_anterior['pipeline'].isin(pipelines_selecionados)]
+
+# ========================================
 # MÉTRICAS PRINCIPAIS (KPIs)
 # ========================================
 st.markdown("### 📊 Visão Geral do Período")
 
-col1, col2, col25, col3, col4, col5 = st.columns(6)
+col1, col2, col25, col4 = st.columns(4)
 
 with col1:
+    # Período atual
     total_leads = len(df_leads.loc[(df_leads['criado_em'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) & (df_leads['criado_em'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))])
-    st.metric("📥 Total de Leads", f"{total_leads:,}".replace(",", "."))
+    leads_convertidos = len(df_leads[df_leads['data_venda'].notna() &
+                                  (df_leads['data_venda'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
+                                  (df_leads['data_venda'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))])
+    
+    # Período anterior
+    total_leads_anterior = len(df_leads_anterior.loc[(df_leads_anterior['criado_em'] >= pd.Timestamp(datetime.combine(data_inicio_anterior, datetime.min.time()))) & (df_leads_anterior['criado_em'] <= pd.Timestamp(datetime.combine(data_fim_anterior, datetime.max.time())))]) if not df_leads_anterior.empty else 0
+    
+    # Calcular diferença
+    if total_leads_anterior > 0:
+        diferenca_leads = total_leads - total_leads_anterior
+        pct_diferenca = ((total_leads - total_leads_anterior) / total_leads_anterior) * 100
+        delta_text = f"{diferenca_leads:+d} leads ({pct_diferenca:+.1f}%)"
+        st.metric("📥 Total de Leads", f"{total_leads:,}".replace(",", "."), delta=delta_text)
+    else:
+        st.metric("📥 Total de Leads", f"{total_leads:,}".replace(",", "."), delta="Sem comparação")
+    
+    if total_leads > 0:
+        taxa_conversao_total = (leads_convertidos / total_leads) * 100
 
 with col2:
+    # Período atual
     leads_com_demo = len(df_leads[df_leads['data_demo'].notna() &
                                  (df_leads['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
                                  (df_leads['data_demo'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))])
-    if total_leads > 0:
-        pct_com_demo = (leads_com_demo / total_leads) * 100
-        st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta=f"{pct_com_demo:.1f}%")
+    
+    # Período anterior
+    leads_com_demo_anterior = len(df_leads_anterior[df_leads_anterior['data_demo'].notna() &
+                                 (df_leads_anterior['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio_anterior, datetime.min.time()))) &
+                                 (df_leads_anterior['data_demo'] <= pd.Timestamp(datetime.combine(data_fim_anterior, datetime.max.time())))]) if not df_leads_anterior.empty else 0
+    
+    # Calcular diferença
+    if leads_com_demo_anterior > 0:
+        diferenca_demo = leads_com_demo - leads_com_demo_anterior
+        pct_diferenca_demo = ((leads_com_demo - leads_com_demo_anterior) / leads_com_demo_anterior) * 100
+        delta_text_demo = f"{diferenca_demo:+d} ({pct_diferenca_demo:+.1f}%)"
+        st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta=delta_text_demo)
     else:
-        st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta="0%")
+        st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta="Sem comparação")
 
 with col25:
-    # Reuniões Realizadas com lógica correta
-    # (status = "Desqualificados" AND data_demo preenchida AND data_noshow vazia)
-    # OU
-    # (data_demo preenchida AND status IN demo_completed_statuses)
+    # Período atual - Reuniões Realizadas com lógica correta
     demos_realizadas = len(df_leads[
         (df_leads['data_demo'].notna()) &
         (df_leads['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
@@ -617,40 +793,83 @@ with col25:
             )
         )
     ])
-    if leads_com_demo > 0:
-        taxa_realizacao_demo = (demos_realizadas / leads_com_demo) * 100
-        st.metric("🎯 Demos Realizadas", f"{demos_realizadas:,}".replace(",", "."), delta=f"{taxa_realizacao_demo:.1f}%")
-
-with col3:
-    leads_atencao_count = len(df_leads[
-        (df_leads['data_demo'] < hoje) &
-        (df_leads['data_noshow'].isna()) &
-        (df_leads['data_venda'].isna()) &
-        (~df_leads['status'].isin(STATUS_POS_DEMO))
+    
+    # Período anterior - Demos Realizadas
+    demos_realizadas_anterior = len(df_leads_anterior[
+        (df_leads_anterior['data_demo'].notna()) &
+        (df_leads_anterior['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio_anterior, datetime.min.time()))) &
+        (df_leads_anterior['data_demo'] <= pd.Timestamp(datetime.combine(data_fim_anterior, datetime.max.time()))) &
+        (
+            (
+                (df_leads_anterior['status'] == 'Desqualificados') &
+                (df_leads_anterior['data_demo'].notna()) &
+                (df_leads_anterior['data_noshow'].isna())
+            ) |
+            (
+                (df_leads_anterior['data_demo'].notna()) &
+                (df_leads_anterior['status'].isin(['5 - Demonstração realizada', '6 - Lead quente', 'Venda ganha']))
+            )
+        )
+    ]) if not df_leads_anterior.empty else 0
+    
+    # Calcular diferença demos realizadas
+    if demos_realizadas_anterior > 0:
+        diferenca_demos_real = demos_realizadas - demos_realizadas_anterior
+        pct_diferenca_demos = ((demos_realizadas - demos_realizadas_anterior) / demos_realizadas_anterior) * 100
+        delta_text_demos = f"{diferenca_demos_real:+d} ({pct_diferenca_demos:+.1f}%)"
+        st.metric("🎯 Demos Realizadas", f"{demos_realizadas:,}".replace(",", "."), delta=delta_text_demos)
+    else:
+        st.metric("🎯 Demos Realizadas", f"{demos_realizadas:,}".replace(",", "."), delta="Sem comparação")
+    
+    # Calcular taxa de noshow período atual
+    noshow_count = len(df_leads[
+        (df_leads['data_noshow'].notna()) &
+        (df_leads['data_noshow'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
+        (df_leads['data_noshow'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))
     ])
-    st.metric("⚠️ Exigem Atualização", f"{leads_atencao_count:,}".replace(",", "."), 
-              delta=None if leads_atencao_count == 0 else "Ação necessária", delta_color="inverse")
+    
+    # Calcular taxa de noshow período anterior
+    noshow_count_anterior = len(df_leads_anterior[
+        (df_leads_anterior['data_noshow'].notna()) &
+        (df_leads_anterior['data_noshow'] >= pd.Timestamp(datetime.combine(data_inicio_anterior, datetime.min.time()))) &
+        (df_leads_anterior['data_noshow'] <= pd.Timestamp(datetime.combine(data_fim_anterior, datetime.max.time())))
+    ]) if not df_leads_anterior.empty else 0
+    
+    # Calcular diferença no-show
+    if noshow_count_anterior > 0 or noshow_count > 0:
+        diferenca_noshow = noshow_count - noshow_count_anterior
+        if noshow_count_anterior > 0:
+            pct_diferenca_noshow = ((noshow_count - noshow_count_anterior) / noshow_count_anterior) * 100
+            delta_text_noshow = f"{diferenca_noshow:+d} ({pct_diferenca_noshow:+.1f}%)"
+        else:
+            delta_text_noshow = f"{diferenca_noshow:+d}"
+        st.metric("📉 No-show", f"{noshow_count:,}".replace(",", "."), delta=delta_text_noshow, delta_color="inverse")
+    else:
+        st.metric("📉 No-show", f"{noshow_count:,}".replace(",", "."), delta="0")
 
 with col4:
-    leads_convertidos = len(df_leads[df_leads['data_venda'].notna() &
-                                  (df_leads['data_venda'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
-                                  (df_leads['data_venda'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))])
-    st.metric("✅ Convertidos", f"{leads_convertidos:,}".replace(",", "."))
-
-with col5:
-    if total_leads > 0:
-        taxa_conversao = (leads_convertidos / total_leads) * 100
-        st.metric("📈 Taxa Conversão", f"{taxa_conversao:.1f}%")
+    # Período anterior - Convertidos
+    leads_convertidos_anterior = len(df_leads_anterior[df_leads_anterior['data_venda'].notna() &
+                                  (df_leads_anterior['data_venda'] >= pd.Timestamp(datetime.combine(data_inicio_anterior, datetime.min.time()))) &
+                                  (df_leads_anterior['data_venda'] <= pd.Timestamp(datetime.combine(data_fim_anterior, datetime.max.time())))]) if not df_leads_anterior.empty else 0
+    
+    # Calcular diferença convertidos
+    if leads_convertidos_anterior > 0:
+        diferenca_convertidos = leads_convertidos - leads_convertidos_anterior
+        pct_diferenca_convertidos = ((leads_convertidos - leads_convertidos_anterior) / leads_convertidos_anterior) * 100
+        delta_text_convertidos = f"{diferenca_convertidos:+d} ({pct_diferenca_convertidos:+.1f}%)"
+        st.metric("✅ Convertidos", f"{leads_convertidos:,}".replace(",", "."), delta=delta_text_convertidos)
     else:
-        st.metric("📈 Taxa Conversão", "0%")
+        st.metric("✅ Convertidos", f"{leads_convertidos:,}".replace(",", "."), delta="Sem comparação")
 
 st.markdown("---")
 
 # ========================================
 # ABAS PRINCIPAIS
 # ========================================
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "🚨 Leads com Atenção", 
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    "🚨 Leads com Atenção",
+    "🤖 Insights IA",
     "📆 Demos de Hoje",
     "📅 Resumo Diário",
     "🔍 Detalhes dos Leads",
@@ -660,44 +879,43 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 ])
 
 # ========================================
-# ABA 1: LEADS QUE EXIGEM ATENÇÃO
+# ABA 1: LEADS QUE EXIGEM ATUALIZAÇÃO
 # ========================================
 with tab1:
-    st.markdown("### 🚨 Leads que Exigem Atenção")
-    st.caption("Leads com demo vencida que não foram atualizados corretamente")
-    
-    leads_atencao = df_leads[
-        (df_leads['data_demo'] < hoje) &  # Demo já passou
-        (df_leads['data_noshow'].isna()) &  # Não marcado como no-show
-        (df_leads['data_venda'].isna()) &  # Não marcado como venda
-        (~df_leads['status'].isin(STATUS_POS_DEMO))  # Status não indica demo realizada
+    # Calcular leads que exigem atualização
+    leads_atualizacao = df_leads[
+        (df_leads['data_demo'] < hoje) &
+        (df_leads['data_noshow'].isna()) &
+        (df_leads['data_venda'].isna()) &
+        (~df_leads['status'].isin(STATUS_POS_DEMO))
     ].copy()
-
-    if not leads_atencao.empty:
+    leads_atualizacao_count = len(leads_atualizacao)
+    
+    st.markdown(f"### 🚨 Leads que Exigem Atualização ({leads_atualizacao_count})")
+    st.caption("Leads com demo vencida que precisam ter o status atualizado")
+    
+    if not leads_atualizacao.empty:
         # Ordenar por data_demo (mais antiga primeiro)
-        leads_atencao = leads_atencao.sort_values('data_demo')
+        leads_atualizacao = leads_atualizacao.sort_values('data_demo')
         
         # Preparar DataFrame para exibição
-        df_atencao_display = leads_atencao[[
+        df_atualizacao_display = leads_atualizacao[[
             'id', 'lead_name', 'vendedor', 'status', 'data_demo'
         ]].copy()
         
-        df_atencao_display.columns = ['ID', 'Lead', 'Vendedor', 'Status Atual', 'Data da Demo']
+        df_atualizacao_display.columns = ['ID', 'Lead', 'Vendedor', 'Status Atual', 'Data da Demo']
         
         # Formatar data
-        df_atencao_display['Data da Demo'] = df_atencao_display['Data da Demo'].dt.strftime('%d/%m/%Y')
+        df_atualizacao_display['Data da Demo'] = df_atualizacao_display['Data da Demo'].dt.strftime('%d/%m/%Y')
         
         # Adicionar link
-        df_atencao_display['Link'] = df_atencao_display['ID'].apply(generate_kommo_link)
-        
-        # Exibir contagem
-        st.error(f"⚠️ **{len(leads_atencao)} leads** precisam de atenção imediata!")
+        df_atualizacao_display['Link'] = df_atualizacao_display['ID'].apply(generate_kommo_link)
         
         st.markdown("")
         
         # Exibir tabela com links clicáveis
         st.dataframe(
-            df_atencao_display[['Lead', 'Vendedor', 'Status Atual', 'Data da Demo', 'Link']],
+            df_atualizacao_display[['Lead', 'Vendedor', 'Status Atual', 'Data da Demo', 'Link']],
             column_config={
                 "Link": st.column_config.LinkColumn(
                     "Link Kommo",
@@ -706,10 +924,159 @@ with tab1:
             },
             hide_index=True,
             width='stretch',
-            height=min(450, len(df_atencao_display) * 35 + 100)
+            height=min(450, len(df_atualizacao_display) * 35 + 100)
         )
     else:
-        st.success("✅ Não há leads que exigem atenção no momento!")
+        st.success("✅ Não há leads que exigem atualização no momento!")
+
+# ========================================
+# ABA 2: INSIGHTS COM IA
+# ========================================
+with tab2:
+    st.markdown("### 🤖 Insights Inteligentes com IA")
+    st.caption("Análise automatizada dos dados do período com recomendações estratégicas")
+    
+    if openai_client:
+        # Botão para gerar insights
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 2])
+        
+        with col_btn1:
+            gerar_insight = st.button("🔄 Gerar Análise", use_container_width=True, key="btn_gerar_insights", type="primary")
+        
+        with col_btn2:
+            if 'insights_gerados' in st.session_state:
+                if st.button("🗑️ Limpar Cache", use_container_width=True, key="btn_limpar_insights"):
+                    del st.session_state['insights_gerados']
+                    st.rerun()
+        
+        st.markdown("")
+        
+        # Preparar métricas uma única vez (fora do if para usar no chat também)
+        metricas_atual = {
+            'total_leads': total_leads,
+            'leads_com_demo': leads_com_demo,
+            'pct_com_demo': (leads_com_demo / total_leads * 100) if total_leads > 0 else 0,
+            'demos_realizadas': demos_realizadas,
+            'noshow_count': noshow_count,
+            'leads_convertidos': leads_convertidos,
+            'taxa_conversao': (leads_convertidos / total_leads * 100) if total_leads > 0 else 0
+        }
+        
+        metricas_anterior = {
+            'total_leads': total_leads_anterior,
+            'leads_com_demo': leads_com_demo_anterior,
+            'demos_realizadas': demos_realizadas_anterior,
+            'noshow_count': noshow_count_anterior,
+            'leads_convertidos': leads_convertidos_anterior
+        }
+        
+        # Descrição do período
+        periodo_descricao = f"{data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
+        
+        if gerar_insight or 'insights_gerados' not in st.session_state:
+            with st.spinner("🤖 Analisando dados e gerando insights estratégicos..."):
+                # Gerar insights
+                insights = gerar_insights_ia(metricas_atual, metricas_anterior, periodo_descricao)
+                
+                if insights:
+                    st.session_state['insights_gerados'] = insights
+        
+        # Exibir insights
+        if 'insights_gerados' in st.session_state:
+            # Container com estilo usando st.container
+            with st.container():
+                st.markdown(
+                    f"""<div style="
+                        background: linear-gradient(135deg, rgba(32, 178, 170, 0.15) 0%, rgba(0, 139, 139, 0.08) 100%);
+                        border-left: 4px solid #20B2AA;
+                        border-radius: 12px;
+                        padding: 1.5rem;
+                        color: #ffffff;
+                        margin-top: 1rem;
+                    ">
+                        {st.session_state['insights_gerados']}
+                    </div>""",
+                    unsafe_allow_html=True
+                )
+            
+            # Informações adicionais
+            st.markdown("")
+            st.caption(f"🕐 Análise gerada em: {datetime.now().strftime('%d/%m/%Y às %H:%M')} | 🤖 Powered by OpenAI GPT-4o-mini")
+            
+            # ========================================
+            # SEÇÃO DE CHAT CONVERSACIONAL
+            # ========================================
+            st.markdown("---")
+            st.markdown("### 💬 Chat com os Dados")
+            st.caption("Faça perguntas sobre os insights e dados atuais")
+            
+            # Inicializar histórico de chat
+            if 'chat_historico' not in st.session_state:
+                st.session_state['chat_historico'] = []
+            
+            # Exibir histórico de chat
+            chat_container = st.container(height=400, border=True)
+            with chat_container:
+                for msg in st.session_state['chat_historico']:
+                    with st.chat_message(msg['role']):
+                        st.markdown(msg['content'])
+            
+            # Input do usuário
+            col_input, col_send = st.columns([0.9, 0.1])
+            
+            with col_input:
+                user_input = st.text_input(
+                    "Sua pergunta:",
+                    placeholder="Ex: Por que o no-show aumentou? Como posso melhorar a conversão?",
+                    label_visibility="collapsed",
+                    key="chat_input"
+                )
+            
+            with col_send:
+                enviar_msg = st.button("📤", use_container_width=True, key="btn_enviar_chat")
+            
+            # Processar mensagem
+            if enviar_msg and user_input:
+                # Adicionar mensagem do usuário ao histórico
+                st.session_state['chat_historico'].append({
+                    'role': 'user',
+                    'content': user_input
+                })
+                
+                # Gerar resposta da IA
+                with st.spinner("🤖 Processando sua pergunta..."):
+                    resposta = chat_com_dados(
+                        user_input,
+                        metricas_atual,
+                        metricas_anterior,
+                        periodo_descricao,
+                        st.session_state['chat_historico'][:-1]  # Histórico sem a mensagem atual
+                    )
+                    
+                    # Adicionar resposta ao histórico
+                    st.session_state['chat_historico'].append({
+                        'role': 'assistant',
+                        'content': resposta
+                    })
+                
+                # Limpar input e fazer refresh
+                st.rerun()
+        else:
+            st.info("👆 Clique no botão 'Gerar Análise' para obter insights inteligentes sobre seus dados.")
+    else:
+        st.warning("⚠️ **Insights com IA não configurados**")
+        st.markdown("""
+        Para habilitar a análise inteligente com IA, siga os passos:
+        
+        1. 🔑 Obtenha uma chave API da OpenAI em: https://platform.openai.com/api-keys
+        2. 📝 Adicione a chave no arquivo `.streamlit/secrets.toml`:
+           ```toml
+           OPENAI_API_KEY = "sk-proj-xxxxx"
+           ```
+        3. 🔄 Reinicie a aplicação
+        
+        **Custo estimado:** ~$0.001 por análise (usando GPT-5-mini)
+        """)
 
 # ========================================
 # PREPARAR DADOS PARA RESUMO DIÁRIO
@@ -911,9 +1278,9 @@ total_row = {
 df_resumo_display = pd.concat([df_resumo_display, pd.DataFrame([total_row])], ignore_index=True)
 
 # ========================================
-# ABA 2: DEMONSTRAÇÕES DE HOJE
+# ABA 3: DEMONSTRAÇÕES DE HOJE
 # ========================================
-with tab2:
+with tab3:
     st.markdown("### 📆 Demonstrações Agendadas para Hoje")
     st.caption("Demos pendentes de realização para o dia de hoje")
 
@@ -1023,9 +1390,9 @@ with tab2:
         st.info("ℹ️ Não há demonstrações agendadas para hoje.")
 
 # ========================================
-# ABA 3: RESUMO DIÁRIO
+# ABA 4: RESUMO DIÁRIO
 # ========================================
-with tab3:
+with tab4:
     st.markdown("### 📅 Resumo Diário da Equipe")
     st.caption("Análise das atividades diárias no período selecionado")
     
@@ -1147,9 +1514,9 @@ with tab3:
             st.warning("Não há dados de vendedores disponíveis")
 
 # ========================================
-# ABA 4: DETALHES DOS LEADS
+# ABA 5: DETALHES DOS LEADS
 # ========================================
-with tab4:
+with tab5:
     st.markdown("### 🔍 Detalhes dos Leads no Período")
     st.caption("Visualização completa e pesquisável de todos os leads")
     
@@ -1222,9 +1589,9 @@ with tab4:
         st.info("Nenhum lead encontrado com o termo pesquisado.")
 
 # ========================================
-# ABA 5: TEMPO POR ETAPA
+# ABA 6: TEMPO POR ETAPA
 # ========================================
-with tab5:
+with tab6:
     st.markdown("### ⏱️ Tempo Médio por Etapa")
     st.caption("Visualize quanto tempo os leads ficam em média em cada etapa do funil")
     
@@ -1334,9 +1701,9 @@ with tab5:
         st.info("⚠️ Dados de tempo por etapa não disponíveis. Certifique-se de que a função RPC 'get_tempo_por_etapa' está configurada no banco de dados.")
 
 # ========================================
-# ABA 6: PRODUTIVIDADE DO VENDEDOR
+# ABA 7: PRODUTIVIDADE DO VENDEDOR
 # ========================================
-with tab6:
+with tab7:
     st.markdown("### 📞 Produtividade do Vendedor")
     st.caption("Análise de chamadas e desempenho dos vendedores")
     
@@ -1521,9 +1888,9 @@ with tab6:
         st.info("⚠️ Dados de chamadas não disponíveis. Certifique-se de que a função RPC 'get_chamadas_vendedores' está configurada no banco de dados.")
 
 # ========================================
-# ABA 7: MURAL DE VENDAS
+# ABA 8: MURAL DE VENDAS
 # ========================================
-with tab7:
+with tab8:
     st.markdown("### 💰 Mural de Vendas")
     st.caption("Análise completa de vendas e desempenho comercial")
     
