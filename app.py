@@ -331,18 +331,70 @@ def get_leads_data(data_inicio: datetime, data_fim: datetime, vendedores: list =
     try:
         query = supabase.table('kommo_leads_statistics').select('*')
         
-        # Filtro de data (criado_em dentro do período)
-        query = query.gte('criado_em', data_inicio.isoformat())
-        query = query.lte('criado_em', data_fim.isoformat())
+        # Filtro de data - buscar leads que tenham qualquer evento (criação, demo, noshow, agendamento, venda) no período
+        # Usar múltiplas queries e combinar resultados
+        data_inicio_iso = data_inicio.isoformat()
+        data_fim_iso = data_fim.isoformat()
         
-        # Filtro de vendedor (se especificado)
+        # Buscar leads por cada coluna de data
+        all_data = []
+        
+        try:
+            # Query 1: criado_em
+            q1 = supabase.table('kommo_leads_statistics').select('*').gte('criado_em', data_inicio_iso).lte('criado_em', data_fim_iso).execute()
+            if q1.data:
+                all_data.extend(q1.data)
+        except:
+            pass
+        
+        try:
+            # Query 2: data_demo
+            q2 = supabase.table('kommo_leads_statistics').select('*').gte('data_demo', data_inicio_iso).lte('data_demo', data_fim_iso).execute()
+            if q2.data:
+                all_data.extend(q2.data)
+        except:
+            pass
+        
+        try:
+            # Query 3: data_noshow
+            q3 = supabase.table('kommo_leads_statistics').select('*').gte('data_noshow', data_inicio_iso).lte('data_noshow', data_fim_iso).execute()
+            if q3.data:
+                all_data.extend(q3.data)
+        except:
+            pass
+        
+        try:
+            # Query 4: data_agendamento
+            q4 = supabase.table('kommo_leads_statistics').select('*').gte('data_agendamento', data_inicio_iso).lte('data_agendamento', data_fim_iso).execute()
+            if q4.data:
+                all_data.extend(q4.data)
+        except:
+            pass
+        
+        try:
+            # Query 5: data_venda
+            q5 = supabase.table('kommo_leads_statistics').select('*').gte('data_venda', data_inicio_iso).lte('data_venda', data_fim_iso).execute()
+            if q5.data:
+                all_data.extend(q5.data)
+        except:
+            pass
+        
+        # Remover duplicatas usando ID
+        if all_data:
+            seen_ids = set()
+            unique_data = []
+            for item in all_data:
+                if item.get('id') not in seen_ids:
+                    seen_ids.add(item.get('id'))
+                    unique_data.append(item)
+            all_data = unique_data
+        
+        # Se há filtro de vendedor, aplicar aqui
         if vendedores and len(vendedores) > 0:
-            query = query.in_('vendedor', vendedores)
+            all_data = [item for item in all_data if item.get('vendedor') in vendedores]
         
-        response = query.execute()
-        
-        if response.data:
-            df = pd.DataFrame(response.data)
+        if all_data:
+            df = pd.DataFrame(all_data)
             
             # Converter colunas de data
             date_columns = ['criado_em', 'data_agendamento', 'data_demo', 'data_noshow', 'data_venda']
@@ -528,19 +580,46 @@ hoje = pd.Timestamp(datetime.now().date())
 # ========================================
 st.markdown("### 📊 Visão Geral do Período")
 
-col1, col2, col3, col4, col5 = st.columns(5)
+col1, col2, col25, col3, col4, col5 = st.columns(6)
 
 with col1:
-    total_leads = len(df_leads)
+    total_leads = len(df_leads.loc[(df_leads['criado_em'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) & (df_leads['criado_em'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))])
     st.metric("📥 Total de Leads", f"{total_leads:,}".replace(",", "."))
 
 with col2:
-    leads_com_demo = len(df_leads[df_leads['data_demo'].notna()])
+    leads_com_demo = len(df_leads[df_leads['data_demo'].notna() &
+                                 (df_leads['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
+                                 (df_leads['data_demo'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))])
     if total_leads > 0:
         pct_com_demo = (leads_com_demo / total_leads) * 100
         st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta=f"{pct_com_demo:.1f}%")
     else:
         st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta="0%")
+
+with col25:
+    # Reuniões Realizadas com lógica correta
+    # (status = "Desqualificados" AND data_demo preenchida AND data_noshow vazia)
+    # OU
+    # (data_demo preenchida AND status IN demo_completed_statuses)
+    demos_realizadas = len(df_leads[
+        (df_leads['data_demo'].notna()) &
+        (df_leads['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
+        (df_leads['data_demo'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time()))) &
+        (
+            (
+                (df_leads['status'] == 'Desqualificados') &
+                (df_leads['data_demo'].notna()) &
+                (df_leads['data_noshow'].isna())
+            ) |
+            (
+                (df_leads['data_demo'].notna()) &
+                (df_leads['status'].isin(['5 - Demonstração realizada', '6 - Lead quente', 'Venda ganha']))
+            )
+        )
+    ])
+    if leads_com_demo > 0:
+        taxa_realizacao_demo = (demos_realizadas / leads_com_demo) * 100
+        st.metric("🎯 Demos Realizadas", f"{demos_realizadas:,}".replace(",", "."), delta=f"{taxa_realizacao_demo:.1f}%")
 
 with col3:
     leads_atencao_count = len(df_leads[
@@ -549,11 +628,13 @@ with col3:
         (df_leads['data_venda'].isna()) &
         (~df_leads['status'].isin(STATUS_POS_DEMO))
     ])
-    st.metric("⚠️ Exigem Atenção", f"{leads_atencao_count:,}".replace(",", "."), 
+    st.metric("⚠️ Exigem Atualização", f"{leads_atencao_count:,}".replace(",", "."), 
               delta=None if leads_atencao_count == 0 else "Ação necessária", delta_color="inverse")
 
 with col4:
-    leads_convertidos = len(df_leads[df_leads['data_venda'].notna()])
+    leads_convertidos = len(df_leads[df_leads['data_venda'].notna() &
+                                  (df_leads['data_venda'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
+                                  (df_leads['data_venda'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))])
     st.metric("✅ Convertidos", f"{leads_convertidos:,}".replace(",", "."))
 
 with col5:
@@ -1468,8 +1549,8 @@ with tab7:
             st.metric("💰 Total de Vendas", f"{total_vendas:,}".replace(",", "."))
         
         with col_v2:
-            # Calcular tempo médio de venda (da criação até a venda)
-            df_vendas['tempo_venda'] = (df_vendas['data_venda'] - df_vendas['criado_em']).dt.total_seconds() / 86400  # em dias
+            # Calcular tempo médio de venda (da criação até a venda) em dias
+            df_vendas['tempo_venda'] = (df_vendas['data_venda'] - df_vendas['criado_em']).dt.total_seconds() / 86400
             tempo_medio_venda = df_vendas['tempo_venda'].mean()
             st.metric("⏱️ Tempo Médio de Venda", f"{tempo_medio_venda:.1f} dias")
         
@@ -1574,9 +1655,18 @@ with tab7:
         # ========================================
         st.markdown("#### 📈 Histórico de Vendas")
         
+        # Criar range completo de datas do período
+        date_range_vendas = pd.date_range(start=data_inicio, end=data_fim, freq='D')
+        df_todas_datas = pd.DataFrame({'data_venda_formatada': date_range_vendas.date})
+        
         # Vendas por dia
         df_vendas['data_venda_formatada'] = df_vendas['data_venda'].dt.date
         df_vendas_dia = df_vendas.groupby('data_venda_formatada').size().reset_index(name='vendas')
+        
+        # Merge com todas as datas do período, preenchendo com 0 onde não há vendas
+        df_vendas_dia = df_todas_datas.merge(df_vendas_dia, on='data_venda_formatada', how='left')
+        df_vendas_dia['vendas'] = df_vendas_dia['vendas'].fillna(0).astype(int)
+        
         df_vendas_dia['data_venda_formatada'] = pd.to_datetime(df_vendas_dia['data_venda_formatada'])
         df_vendas_dia = df_vendas_dia.sort_values('data_venda_formatada')
         df_vendas_dia['Data'] = df_vendas_dia['data_venda_formatada'].dt.strftime('%d/%m')
@@ -1697,10 +1787,14 @@ with tab7:
         st.markdown("#### 📋 Detalhes das Vendas")
         
         # Preparar tabela de vendas
-        df_vendas_table = df_vendas[['lead_name', 'vendedor', 'pipeline', 'criado_em', 'data_venda', 'tempo_venda']].copy()
+        df_vendas_table = df_vendas[['id', 'lead_name', 'vendedor', 'pipeline', 'criado_em', 'data_venda', 'tempo_venda']].copy()
         df_vendas_table['criado_em'] = df_vendas_table['criado_em'].dt.strftime('%d/%m/%Y')
         df_vendas_table['data_venda'] = df_vendas_table['data_venda'].dt.strftime('%d/%m/%Y')
         df_vendas_table['tempo_venda'] = df_vendas_table['tempo_venda'].round(1)
+        
+        # Adicionar link do Kommo
+        df_vendas_table['Link'] = df_vendas_table['id'].apply(generate_kommo_link)
+        
         df_vendas_table = df_vendas_table.rename(columns={
             'lead_name': 'Lead',
             'vendedor': 'Vendedor',
@@ -1710,6 +1804,9 @@ with tab7:
             'tempo_venda': 'Tempo (dias)'
         })
         
+        # Remover coluna ID após criar link
+        df_vendas_table = df_vendas_table.drop(columns=['id'])
+        
         st.dataframe(
             df_vendas_table.sort_values('Data Venda', ascending=False),
             column_config={
@@ -1718,7 +1815,8 @@ with tab7:
                 "Pipeline": st.column_config.TextColumn("Pipeline"),
                 "Data Criação": st.column_config.TextColumn("Criado em"),
                 "Data Venda": st.column_config.TextColumn("Vendido em"),
-                "Tempo (dias)": st.column_config.NumberColumn("Ciclo (dias)", format="%.1f")
+                "Tempo (dias)": st.column_config.NumberColumn("Ciclo (dias)", format="%.1f"),
+                "Link": st.column_config.LinkColumn("Link Kommo", display_text="Abrir")
             },
             hide_index=True,
             width='stretch',
