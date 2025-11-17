@@ -1301,22 +1301,27 @@ with tab3:
         ]].copy()
         
         # Criar coluna Horário usando data_hora_demo prioritariamente, senão data_demo
-        df_demos_hoje['Horário'] = df_demos_hoje['data_hora_demo'].fillna(df_demos_hoje['data_demo'])
+        df_demos_hoje['Horário'] = df_demos_hoje['data_hora_demo']
         
         # Garantir que a coluna seja datetime e converter para GMT-3
-        df_demos_hoje['Horário'] = pd.to_datetime(df_demos_hoje['Horário'])
+        df_demos_hoje['Horário'] = pd.to_datetime(df_demos_hoje['Horário'], errors='coerce')
         
         # Converter para GMT-3 se já tiver timezone, senão assumir UTC e converter
         if df_demos_hoje['Horário'].dt.tz is not None:
             df_demos_hoje['Horário'] = df_demos_hoje['Horário'].dt.tz_convert('America/Sao_Paulo')
         else:
             df_demos_hoje['Horário'] = df_demos_hoje['Horário'].dt.tz_localize('UTC').dt.tz_convert('America/Sao_Paulo')
+                        
+        df_demos_hoje = df_demos_hoje[['id', 'lead_name', 'vendedor', 'status', 'Horário', 'data_demo']].copy()
+        df_demos_hoje.columns = ['ID', 'Lead', 'Vendedor', 'Status', 'Horário da Demo', 'Data Demo']
         
-        df_demos_hoje = df_demos_hoje[['id', 'lead_name', 'vendedor', 'status', 'Horário']].copy()
-        df_demos_hoje.columns = ['ID', 'Lead', 'Vendedor', 'Status', 'Horário da Demo']
+        # Ordenar por horário ANTES de formatar para string
+        df_demos_hoje = df_demos_hoje.sort_values('Horário da Demo')
         
         # Formatar horário
         df_demos_hoje['Horário da Demo'] = df_demos_hoje['Horário da Demo'].dt.strftime('%d/%m/%Y %H:%M')
+        df_demos_hoje['Data Demo'] = df_demos_hoje['Data Demo'].dt.strftime('%d/%m/%Y %H:%M')
+        df_demos_hoje['Horário da Demo'] = df_demos_hoje['Horário da Demo'].fillna(df_demos_hoje['Data Demo'])
         
         # Adicionar link
         df_demos_hoje['Link'] = df_demos_hoje['ID'].apply(generate_kommo_link)
@@ -1340,7 +1345,6 @@ with tab3:
         
         st.markdown("")
         st.markdown("#### 📋 Lista de Demonstrações")
-        df_demos_hoje = df_demos_hoje.sort_values('Horário da Demo')
         
         # Exibir tabela
         st.dataframe(
