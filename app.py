@@ -867,7 +867,7 @@ st.markdown("---")
 # ========================================
 # ABAS PRINCIPAIS
 # ========================================
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "🚨 Leads com Atenção",
     "🤖 Insights IA",
     "📆 Demos de Hoje",
@@ -875,7 +875,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🔍 Detalhes dos Leads",
     "⏱️ Tempo por Etapa",
     "📞 Produtividade do Vendedor",
-    "💰 Mural de Vendas"
+    "💰 Mural de Vendas",
+    "✅ Demos Realizadas"
 ])
 
 # ========================================
@@ -2196,6 +2197,207 @@ with tab8:
     else:
         st.info("📊 Nenhuma venda registrada no período selecionado.")
         st.caption("Ajuste os filtros na barra lateral para visualizar vendas de outros períodos.")
+
+# ========================================
+# ABA 9: DEMOS REALIZADAS
+# ========================================
+with tab9:
+    st.markdown("### ✅ Demonstrações Realizadas")
+    st.caption("Análise completa das demonstrações realizadas no período")
+    
+    # Filtrar demos realizadas usando a MESMA lógica da Visão Geral
+    demos_realizadas_df = df_leads[
+        (df_leads['data_demo'].notna()) &
+        (df_leads['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
+        (df_leads['data_demo'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time()))) &
+        (
+            (
+                (df_leads['status'] == 'Desqualificados') &
+                (df_leads['data_demo'].notna()) &
+                (df_leads['data_noshow'].isna())
+            ) |
+            (
+                (df_leads['data_demo'].notna()) &
+                (df_leads['status'].isin(['5 - Demonstração realizada', '6 - Lead quente', 'Venda ganha']))
+            )
+        )
+    ].copy()
+    
+    if not demos_realizadas_df.empty:
+        # ========================================
+        # SEÇÃO 1: MÉTRICAS GERAIS
+        # ========================================
+        col_dr1, col_dr2, col_dr3, col_dr4 = st.columns(4)
+        
+        with col_dr1:
+            total_demos = len(demos_realizadas_df)
+            st.metric("✅ Total Demos Realizadas", f"{total_demos:,}".replace(",", "."))
+        
+        with col_dr2:
+            demos_convertidas = len(demos_realizadas_df[demos_realizadas_df['status'] == 'Venda ganha'])
+            st.metric("💰 Demos Convertidas", f"{demos_convertidas:,}".replace(",", "."))
+        
+        with col_dr3:
+            demos_desqualificadas = len(demos_realizadas_df[demos_realizadas_df['status'] == 'Desqualificados'])
+            st.metric("❌ Demos Desqualificadas", f"{demos_desqualificadas:,}".replace(",", "."))
+        
+        with col_dr4:
+            taxa_conversao_demo = (demos_convertidas / total_demos * 100) if total_demos > 0 else 0
+            st.metric("📈 Taxa de Conversão", f"{taxa_conversao_demo:.1f}%")
+        
+        st.markdown("")
+        
+        # ========================================
+        # SEÇÃO 2: TABELA DE DEMOS REALIZADAS
+        # ========================================
+        st.markdown("#### 📋 Lista de Demonstrações Realizadas")
+        
+        # Preparar DataFrame para exibição
+        df_demos_display = demos_realizadas_df[['id', 'lead_name', 'vendedor', 'data_demo', 'status']].copy()
+        df_demos_display.columns = ['ID', 'Lead', 'Vendedor', 'Data Demo', 'Status']
+        
+        # Formatar data
+        df_demos_display['Data Demo'] = df_demos_display['Data Demo'].dt.strftime('%d/%m/%Y')
+        
+        # Ordenar por data (mais recente primeiro)
+        df_demos_display = df_demos_display.sort_values('Data Demo', ascending=False)
+        
+        # Adicionar link
+        df_demos_display['Link'] = df_demos_display['ID'].apply(generate_kommo_link)
+        
+        st.dataframe(
+            df_demos_display[['Link', 'Lead', 'Vendedor', 'Data Demo', 'Status']],
+            column_config={
+                "Link": st.column_config.LinkColumn("🔗 Link", display_text="Abrir"),
+                "Lead": st.column_config.TextColumn("Lead"),
+                "Vendedor": st.column_config.TextColumn("Vendedor"),
+                "Data Demo": st.column_config.TextColumn("Data Demo"),
+                "Status": st.column_config.TextColumn("Status Atual")
+            },
+            hide_index=True,
+            width='stretch',
+            height=min(400, len(df_demos_display) * 35 + 100)
+        )
+        
+        st.markdown("")
+        
+        # ========================================
+        # SEÇÃO 3: ANÁLISE DE DESQUALIFICAÇÕES
+        # ========================================
+        if demos_desqualificadas > 0:
+            st.markdown("#### ❌ Análise de Desqualificações")
+            
+            # Filtrar apenas desqualificados
+            df_desqualificados = demos_realizadas_df[demos_realizadas_df['status'] == 'Desqualificados'].copy()
+            
+            # Verificar se existem as colunas de motivo e descrição
+            if 'motivos_desqualificacao' in df_desqualificados.columns:
+                # Contar motivos de desqualificação
+                df_motivos = df_desqualificados['motivos_desqualificacao'].value_counts().reset_index()
+                df_motivos.columns = ['Motivo', 'Quantidade']
+                
+                # Gráfico de barras horizontais
+                col_graf, col_tabela = st.columns([2, 1])
+                
+                with col_graf:
+                    fig_motivos = px.bar(
+                        df_motivos,
+                        y='Motivo',
+                        x='Quantidade',
+                        title='Motivos de Desqualificação',
+                        orientation='h',
+                        labels={'Motivo': 'Motivo', 'Quantidade': 'Quantidade'},
+                        color='Quantidade',
+                        color_continuous_scale='Reds'
+                    )
+                    fig_motivos.update_layout(height=max(300, len(df_motivos) * 40), showlegend=False)
+                    st.plotly_chart(fig_motivos, use_container_width=True)
+                
+                with col_tabela:
+                    st.markdown("**📊 Resumo**")
+                    st.dataframe(
+                        df_motivos,
+                        column_config={
+                            "Motivo": st.column_config.TextColumn("Motivo"),
+                            "Quantidade": st.column_config.NumberColumn("Qtd", format="%d")
+                        },
+                        hide_index=True,
+                        width='stretch',
+                        height=max(300, len(df_motivos) * 35 + 50)
+                    )
+            else:
+                st.info("ℹ️ Coluna 'motivos_desqualificacao' não encontrada nos dados.")
+            
+            st.markdown("")
+            
+            # ========================================
+            # SEÇÃO 4: DESCRIÇÕES DAS DESQUALIFICAÇÕES
+            # ========================================
+            if 'descricao_desqualificacao' in df_desqualificados.columns:
+                st.markdown("#### 📝 Descrições das Desqualificações")
+                st.caption("Detalhes e observações sobre cada desqualificação")
+                
+                # Filtrar apenas registros com descrição
+                df_com_descricao = df_desqualificados[
+                    df_desqualificados['descricao_desqualificacao'].notna() & 
+                    (df_desqualificados['descricao_desqualificacao'] != '')
+                ].copy()
+                
+                if not df_com_descricao.empty:
+                    # Preparar DataFrame para exibição
+                    df_descricoes = df_com_descricao[
+                        ['id', 'lead_name', 'vendedor', 'motivos_desqualificacao', 'descricao_desqualificacao', 'data_demo']
+                    ].copy()
+                    
+                    df_descricoes.columns = ['ID', 'Lead', 'Vendedor', 'Motivo', 'Descrição', 'Data Demo']
+                    df_descricoes['Data Demo'] = df_descricoes['Data Demo'].dt.strftime('%d/%m/%Y')
+                    df_descricoes = df_descricoes.sort_values('Data Demo', ascending=False)
+                    
+                    # Adicionar link
+                    df_descricoes['Link'] = df_descricoes['ID'].apply(generate_kommo_link)
+                    
+                    # Exibir tabela com descrições
+                    st.dataframe(
+                        df_descricoes[['Link', 'Lead', 'Vendedor', 'Motivo', 'Data Demo', 'Descrição']],
+                        column_config={
+                            "Link": st.column_config.LinkColumn("🔗 Link", display_text="Abrir"),
+                            "Lead": st.column_config.TextColumn("Lead", width="medium"),
+                            "Vendedor": st.column_config.TextColumn("Vendedor", width="small"),
+                            "Motivo": st.column_config.TextColumn("Motivo", width="medium"),
+                            "Data Demo": st.column_config.TextColumn("Data", width="small"),
+                            "Descrição": st.column_config.TextColumn("Descrição", width="large")
+                        },
+                        hide_index=True,
+                        width='stretch',
+                        height=min(500, len(df_descricoes) * 50 + 100)
+                    )
+                    
+                    # Opção de expandir descrições individuais
+                    st.markdown("")
+                    with st.expander("🔍 Ver Descrições Detalhadas (Uma por Vez)"):
+                        lead_selecionado = st.selectbox(
+                            "Selecione um lead para ver a descrição completa",
+                            options=df_descricoes['Lead'].tolist(),
+                            key="lead_descricao_select"
+                        )
+                        
+                        if lead_selecionado:
+                            descricao_completa = df_descricoes[df_descricoes['Lead'] == lead_selecionado].iloc[0]
+                            
+                            st.markdown(f"**Lead:** {descricao_completa['Lead']}")
+                            st.markdown(f"**Vendedor:** {descricao_completa['Vendedor']}")
+                            st.markdown(f"**Motivo:** {descricao_completa['Motivo']}")
+                            st.markdown(f"**Data:** {descricao_completa['Data Demo']}")
+                            st.markdown("**Descrição Completa:**")
+                            st.info(descricao_completa['Descrição'])
+                else:
+                    st.info("ℹ️ Nenhuma desqualificação possui descrição preenchida.")
+            else:
+                st.info("ℹ️ Coluna 'descricao_desqualificacao' não encontrada nos dados.")
+        else:
+            st.success("✨ Nenhuma demonstração foi desqualificada no período!")
+    else:
+        st.info("ℹ️ Nenhuma demonstração realizada no período selecionado.")
 
 # Footer
 st.markdown("---")
