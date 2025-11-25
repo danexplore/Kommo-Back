@@ -1922,7 +1922,7 @@ with tab8:
         
         with col_v2:
             # Calcular tempo médio de venda (da criação até a venda) em dias
-            df_vendas['tempo_venda'] = (df_vendas['data_venda'] - df_vendas['criado_em']).dt.total_seconds() / 86400
+            df_vendas['tempo_venda'] = (df_vendas['data_venda'].dt.normalize() - df_vendas['criado_em'].dt.normalize()).dt.days
             tempo_medio_venda = df_vendas['tempo_venda'].mean()
             st.metric("⏱️ Tempo Médio de Venda", f"{tempo_medio_venda:.1f} dias")
         
@@ -2234,7 +2234,12 @@ with tab9:
             st.metric("✅ Total Demos Realizadas", f"{total_demos:,}".replace(",", "."))
         
         with col_dr2:
-            demos_convertidas = len(demos_realizadas_df[demos_realizadas_df['status'] == 'Venda ganha'])
+            # Contar vendas ganhas no período (usando df_leads filtrado)
+            demos_convertidas = len(df_leads[
+                (df_leads['data_venda'].notna()) &
+                (df_leads['data_venda'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
+                (df_leads['data_venda'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))
+            ])
             st.metric("💰 Demos Convertidas", f"{demos_convertidas:,}".replace(",", "."))
         
         with col_dr3:
