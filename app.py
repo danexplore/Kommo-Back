@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import os
 from supabase import create_client, Client
 import plotly.express as px
-from openai import OpenAI
+import google.generativeai as genai
 
 # Configuração da página
 st.set_page_config(
@@ -55,18 +55,19 @@ def init_supabase():
 
 supabase: Client = init_supabase()
 
-# Configuração do OpenAI
+# Configuração do Google Gemini
 @st.cache_resource
-def init_openai():
-    """Inicializa cliente OpenAI"""
-    api_key = st.secrets["OPENAI_API_KEY"]
+def init_gemini():
+    """Inicializa cliente Google Gemini"""
+    api_key = st.secrets.get("GEMINI_API_KEY", None)
     
     if not api_key:
         return None
     
-    return OpenAI(api_key=api_key)
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel('gemini-2.5-flash')
 
-openai_client = init_openai()
+gemini_client = init_gemini()
 
 # CSS customizado - ecosys AUTO Branding
 st.markdown("""
@@ -447,9 +448,9 @@ def format_dataframe_with_links(df, id_column='id', name_column='lead_name'):
 
 @st.cache_data(ttl=3600)  # Cache de 1 hora
 def gerar_insights_ia(metricas_atual, metricas_anterior, periodo_descricao):
-    """Gera insights usando IA da OpenAI"""
+    """Gera insights usando IA do Google Gemini"""
     
-    if not openai_client:
+    if not gemini_client:
         return None
     
     try:
@@ -496,15 +497,14 @@ Por favor, forneça:
 Utilize um markdown leve para formatação da resposta.
 Seja direto, objetivo e use linguagem de negócios. Foque em insights que gerem ação."""
 
-        response = openai_client.chat.completions.create(
-            model="gpt-5-mini",
-            messages=[
-                {"role": "system", "content": "Você é um analista de vendas experiente. Forneça insights diretos e acionáveis."},
-                {"role": "user", "content": prompt}
-            ]
-        )
+        # Combinar system prompt com user prompt para Gemini
+        full_prompt = f"""Você é um analista de vendas experiente. Forneça insights diretos e acionáveis.
+
+{prompt}"""
         
-        return response.choices[0].message.content
+        response = gemini_client.generate_content(full_prompt)
+        
+        return response.text
         
     except Exception as e:
         return f"❌ **Erro ao gerar insights:** {str(e)}"
@@ -512,8 +512,8 @@ Seja direto, objetivo e use linguagem de negócios. Foque em insights que gerem 
 def chat_com_dados(mensagem_usuario, metricas_atual, metricas_anterior, periodo_descricao, historico_chat):
     """Realiza conversa com IA sobre os dados"""
     
-    if not openai_client:
-        return "Erro: OpenAI não configurada"
+    if not gemini_client:
+        return "Erro: Google Gemini não configurado"
     
     try:
         # Preparar contexto dos dados
@@ -530,31 +530,31 @@ CONTEXTO DOS DADOS (Período: {periodo_descricao}):
 - Leads Convertidos Anterior: {metricas_anterior['leads_convertidos']}
 """
         
-        # Construir mensagens do histórico
-        mensagens = [
-            {"role": "system", "content": f"""Você é um assistente especializado em análise de vendas e CRM. 
+        # Construir prompt completo com contexto e histórico
+        prompt_completo = f"""Você é um assistente especializado em análise de vendas e CRM. 
 Você tem acesso aos dados atuais de performance de leads e pode responder perguntas sobre tendências, 
 recomendações e análises dos dados.
 
 {contexto_dados}
 
-Responda em português do Brasil, de forma conversacional e profissional."""}
-        ]
+Responda em português do Brasil, de forma conversacional e profissional.
+
+"""
         
-        # Adicionar histórico de chat
-        for msg_hist in historico_chat:
-            mensagens.append({"role": msg_hist["role"], "content": msg_hist["content"]})
+        # Adicionar histórico de chat ao prompt
+        if historico_chat:
+            prompt_completo += "\n--- HISTÓRICO DA CONVERSA ---\n"
+            for msg_hist in historico_chat:
+                role_label = "Assistente" if msg_hist["role"] == "assistant" else "Usuário"
+                prompt_completo += f"{role_label}: {msg_hist['content']}\n\n"
         
-        # Adicionar mensagem atual do usuário
-        mensagens.append({"role": "user", "content": mensagem_usuario})
+        # Adicionar mensagem atual
+        prompt_completo += f"\nUsuário: {mensagem_usuario}\n\nAssistente:"
         
-        # Chamar API
-        response = openai_client.chat.completions.create(
-            model="gpt-5-mini",
-            messages=mensagens
-        )
+        # Chamar API do Gemini
+        response = gemini_client.generate_content(prompt_completo)
         
-        return response.choices[0].message.content
+        return response.text
         
     except Exception as e:
         return f"Erro ao processar sua pergunta: {str(e)}"
@@ -937,7 +937,7 @@ with tab2:
     st.markdown("### 🤖 Insights Inteligentes com IA")
     st.caption("Análise automatizada dos dados do período com recomendações estratégicas")
     
-    if openai_client:
+    if gemini_client:
         # Botão para gerar insights
         col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 2])
         
@@ -1069,14 +1069,14 @@ with tab2:
         st.markdown("""
         Para habilitar a análise inteligente com IA, siga os passos:
         
-        1. 🔑 Obtenha uma chave API da OpenAI em: https://platform.openai.com/api-keys
+        1. 🔑 Obtenha uma chave API do Google Gemini em: https://aistudio.google.com/app/apikey
         2. 📝 Adicione a chave no arquivo `.streamlit/secrets.toml`:
            ```toml
-           OPENAI_API_KEY = "sk-proj-xxxxx"
+           GEMINI_API_KEY = "AIza..."
            ```
         3. 🔄 Reinicie a aplicação
         
-        **Custo estimado:** ~$0.001 por análise (usando GPT-5-mini)
+        **Custo:** Gratuito até 15 requisições/minuto (Gemini 1.5 Flash)
         """)
 
 # ========================================
