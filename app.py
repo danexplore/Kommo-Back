@@ -1378,6 +1378,9 @@ with tab7:
             # Garantir que todas as datas do período apareçam (mesmo sem discagens)
             df_discagens_dia['data'] = pd.to_datetime(df_discagens_dia['data'])
             
+            if vendedor_selecionado != 'Todos':
+                df_discagens_dia = df_discagens_dia[df_discagens_dia['name'] == vendedor_selecionado]
+            
             # Criar gráfico de linhas (usando paleta do módulo config)
             fig_discagens_dia = px.line(
                 df_discagens_dia,
@@ -1527,8 +1530,8 @@ with tab7:
                     'Quantidade': [total_efetivas, total_atendidas, total_discagens],
                     'Percentual': [taxa_conversao_geral, taxa_atendimento, 100],
                     'Label': [
-                        f'({taxa_conversao_geral:.1f}%)',
                         f'({taxa_atendimento:.1f}%)',
+                        f'({taxa_conversao_geral:.1f}%)',
                         f''
                     ]
                 })
