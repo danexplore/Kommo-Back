@@ -2282,7 +2282,264 @@ with tab9:
         st.markdown("")
         
         # ========================================
-        # SEÇÃO 2: TABELA DE DEMOS REALIZADAS
+        # SEÇÃO 2: ROI MARKETING - ANÁLISE DE CAMPANHAS
+        # ========================================
+        st.markdown("#### 📣 ROI Marketing - Análise de Campanhas")
+        st.caption("Identifique quais campanhas geram mais demos e quais desqualificam mais")
+        
+        # Verificar se existem colunas de UTM
+        utm_cols_disponiveis = []
+        for col in ['utm_campaign', 'utm_source', 'utm_medium']:
+            if col in demos_realizadas_df.columns:
+                utm_cols_disponiveis.append(col)
+        
+        if utm_cols_disponiveis:
+            # Seletor de dimensão UTM
+            col_utm_select, col_utm_info = st.columns([1, 2])
+            
+            with col_utm_select:
+                utm_selecionada = st.selectbox(
+                    "Analisar por:",
+                    options=utm_cols_disponiveis,
+                    format_func=lambda x: {
+                        'utm_campaign': '🎯 Campanha (utm_campaign)',
+                        'utm_source': '🌐 Fonte (utm_source)',
+                        'utm_medium': '📱 Mídia (utm_medium)'
+                    }.get(x, x),
+                    key="utm_roi_select"
+                )
+            
+            with col_utm_info:
+                st.info(f"📊 Mostrando análise por **{utm_selecionada.replace('utm_', '').title()}**")
+            
+            # Preparar dados de análise de demos
+            df_utm_analise = demos_realizadas_df.copy()
+            df_utm_analise[utm_selecionada] = df_utm_analise[utm_selecionada].fillna('(não informado)')
+            df_utm_analise[utm_selecionada] = df_utm_analise[utm_selecionada].replace('', '(não informado)')
+            
+            # Agrupar demos por UTM (total e desqualificados)
+            df_demos_por_utm = df_utm_analise.groupby(utm_selecionada).agg(
+                total_demos=('id', 'count'),
+                desqualificados=('status', lambda x: (x == 'Desqualificados').sum())
+            ).reset_index()
+            
+            # Pegar vendas do período e agrupar por UTM (convertidos)
+            df_vendas_periodo = df_leads[
+                (df_leads['data_venda'].notna()) &
+                (df_leads['data_venda'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
+                (df_leads['data_venda'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))
+            ].copy()
+            df_vendas_periodo[utm_selecionada] = df_vendas_periodo[utm_selecionada].fillna('(não informado)')
+            df_vendas_periodo[utm_selecionada] = df_vendas_periodo[utm_selecionada].replace('', '(não informado)')
+            
+            df_vendas_por_utm = df_vendas_periodo.groupby(utm_selecionada).agg(
+                convertidos=('id', 'count')
+            ).reset_index()
+            
+            # Fazer merge dos dois DataFrames
+            df_utm_resumo = df_demos_por_utm.merge(df_vendas_por_utm, on=utm_selecionada, how='left')
+            df_utm_resumo['convertidos'] = df_utm_resumo['convertidos'].fillna(0).astype(int)
+            
+            # Calcular percentuais
+            df_utm_resumo['taxa_desqualificacao'] = (df_utm_resumo['desqualificados'] / df_utm_resumo['total_demos'] * 100).round(1)
+            df_utm_resumo['taxa_conversao'] = (df_utm_resumo['convertidos'] / df_utm_resumo['total_demos'] * 100).round(1)
+            df_utm_resumo['aproveitamento'] = df_utm_resumo['total_demos'] - df_utm_resumo['desqualificados']
+            
+            # Ordenar por total de demos (decrescente)
+            df_utm_resumo = df_utm_resumo.sort_values('total_demos', ascending=False)
+            
+            # Renomear coluna UTM para exibição
+            df_utm_resumo = df_utm_resumo.rename(columns={utm_selecionada: 'Campanha/Fonte'})
+            
+            st.markdown("")
+            
+            # Exibir métricas resumidas
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            
+            with col_m1:
+                total_campanhas = len(df_utm_resumo[df_utm_resumo['Campanha/Fonte'] != '(não informado)'])
+                st.metric("🎯 Campanhas Ativas", total_campanhas)
+            
+            with col_m2:
+                melhor_campanha = df_utm_resumo[df_utm_resumo['Campanha/Fonte'] != '(não informado)'].nlargest(1, 'total_demos')
+                if not melhor_campanha.empty:
+                    camp_nome = melhor_campanha['Campanha/Fonte'].iloc[0]
+                    camp_demos = melhor_campanha['total_demos'].iloc[0]
+                    st.metric("🏆 Mais Demos", f"{camp_demos}", delta=f"Campanha: {camp_nome}", delta_color="off")
+                else:
+                    st.metric("🏆 Mais Demos", "-")
+            
+            with col_m3:
+                # Campanha com melhor taxa de conversão (mínimo 3 demos)
+                df_com_conversao = df_utm_resumo[(df_utm_resumo['Campanha/Fonte'] != '(não informado)') & (df_utm_resumo['total_demos'] >= 3)]
+                if not df_com_conversao.empty:
+                    melhor_conversao = df_com_conversao.nlargest(1, 'taxa_conversao')
+                    st.metric("💰 Melhor Conversão", f"{melhor_conversao['taxa_conversao'].iloc[0]:.0f}%", delta=f"Campanha: {melhor_conversao['Campanha/Fonte'].iloc[0]}", delta_color="off")
+                else:
+                    st.metric("💰 Melhor Conversão", "-")
+            
+            with col_m4:
+                # Campanha com maior desqualificação (alerta)
+                df_com_desq = df_utm_resumo[(df_utm_resumo['Campanha/Fonte'] != '(não informado)') & (df_utm_resumo['total_demos'] >= 3)]
+                if not df_com_desq.empty:
+                    pior_campanha = df_com_desq.nlargest(1, 'taxa_desqualificacao')
+                    st.metric("⚠️ Maior Desqualificação", f"{pior_campanha['taxa_desqualificacao'].iloc[0]:.0f}%", delta=f"Campanha: {pior_campanha['Campanha/Fonte'].iloc[0]}", delta_color="inverse")
+                else:
+                    st.metric("⚠️ Maior Desqualificação", "-")
+            
+            st.markdown("")
+            
+            # Gráficos lado a lado
+            col_graf1, col_graf2 = st.columns(2)
+            
+            with col_graf1:
+                # Top 10 campanhas por volume de demos
+                df_top10 = df_utm_resumo.nlargest(10, 'total_demos').copy()
+                
+                # Preparar dados para gráfico de barras sobrepostas
+                df_top10_melted = df_top10.melt(
+                    id_vars=['Campanha/Fonte'],
+                    value_vars=['total_demos', 'convertidos'],
+                    var_name='Métrica',
+                    value_name='Quantidade'
+                )
+                df_top10_melted['Métrica'] = df_top10_melted['Métrica'].map({
+                    'total_demos': 'Demos',
+                    'convertidos': 'Convertidos'
+                })
+                # Ordenar para que Demos seja renderizado primeiro (embaixo) e Convertidos por cima
+                df_top10_melted['ordem'] = df_top10_melted['Métrica'].map({'Demos': 2, 'Convertidos': 1})
+                df_top10_melted = df_top10_melted.sort_values('ordem')
+                
+                fig_demos = px.bar(
+                    df_top10_melted,
+                    x='Quantidade',
+                    range_x=[0, df_top10_melted['Quantidade'].max()+2],
+                    y='Campanha/Fonte',
+                    color='Métrica',
+                    orientation='h',
+                    title='📊 Top 10 - Demos e Conversões por Campanha',
+                    labels={'Quantidade': 'Quantidade', 'Campanha/Fonte': ''},
+                    color_discrete_map={'Demos': '#4A9FFF', 'Convertidos': '#48BB78'},
+                    text='Quantidade',
+                    barmode='group'
+                )
+                fig_demos.update_layout(
+                    height=450,
+                    showlegend=True,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="center",
+                        x=0.5
+                    ),
+                    yaxis={'categoryorder': 'total ascending'}
+                )
+                fig_demos.update_traces(textposition='outside', textfont_size=11)
+                st.plotly_chart(fig_demos, use_container_width=True)
+            
+            with col_graf2:
+                # Taxa de desqualificação por campanha (mínimo 3 demos)
+                df_desq = df_utm_resumo[df_utm_resumo['total_demos'] >= 3].nlargest(10, 'taxa_desqualificacao').copy()
+                
+                if not df_desq.empty:
+                    fig_desq = px.bar(
+                        df_desq,
+                        x='taxa_desqualificacao',
+                        range_x=[0, df_desq['taxa_desqualificacao'].max()+10],
+                        y='Campanha/Fonte',
+                        orientation='h',
+                        title='⚠️ Taxa de Desqualificação por Campanha',
+                        labels={'taxa_desqualificacao': 'Taxa de Desqualificação (%)', 'Campanha/Fonte': ''},
+                        color='taxa_desqualificacao',
+                        color_continuous_scale='Reds',
+                        text=df_desq['taxa_desqualificacao'].apply(lambda x: f'{x:.1f}%')
+                    )
+                    fig_desq.update_layout(
+                        height=400,
+                        showlegend=False,
+                        yaxis={'categoryorder': 'total ascending'}
+                    )
+                    fig_desq.update_traces(textposition='outside', textfont_size=12)
+                    st.plotly_chart(fig_desq, use_container_width=True)
+                else:
+                    st.info("Dados insuficientes para análise de desqualificação (mínimo 3 demos por campanha)")
+            
+            st.markdown("")
+            
+            # Tabela detalhada
+            st.markdown("##### 📋 Detalhamento por Campanha")
+            
+            # Formatar tabela para exibição
+            df_tabela_utm = df_utm_resumo.copy()
+            df_tabela_utm = df_tabela_utm.rename(columns={
+                'total_demos': 'Demos',
+                'desqualificados': 'Desqualificados',
+                'convertidos': 'Vendas',
+                'taxa_desqualificacao': '% Desqualificação',
+                'taxa_conversao': '% Conversão',
+                'aproveitamento': 'Aproveitamento'
+            })
+            
+            st.dataframe(
+                df_tabela_utm[['Campanha/Fonte', 'Demos', 'Aproveitamento', 'Desqualificados', 'Vendas', '% Desqualificação', '% Conversão']],
+                column_config={
+                    "Campanha/Fonte": st.column_config.TextColumn("Campanha/Fonte", width="large"),
+                    "Demos": st.column_config.NumberColumn("Demos", format="%d"),
+                    "Aproveitamento": st.column_config.NumberColumn("Aproveitamento", format="%d", help="Demos - Desqualificados"),
+                    "Desqualificados": st.column_config.NumberColumn("Desqualificados", format="%d"),
+                    "Vendas": st.column_config.NumberColumn("Vendas", format="%d"),
+                    "% Desqualificação": st.column_config.NumberColumn("% Desq.", format="%.1f%%"),
+                    "% Conversão": st.column_config.NumberColumn("% Conv.", format="%.1f%%")
+                },
+                hide_index=True,
+                width='stretch',
+                height=min(400, len(df_tabela_utm) * 35 + 50)
+            )
+            
+            # Insights automáticos
+            st.markdown("")
+            with st.expander("💡 Insights Automáticos de Marketing"):
+                insights = []
+                
+                # Insight 1: Campanha com mais demos
+                top_camp = df_utm_resumo[df_utm_resumo['Campanha/Fonte'] != '(não informado)'].nlargest(1, 'total_demos')
+                if not top_camp.empty:
+                    insights.append(f"🏆 **Maior volume:** A campanha **{top_camp['Campanha/Fonte'].iloc[0]}** gerou {top_camp['total_demos'].iloc[0]} demos ({top_camp['total_demos'].iloc[0]/df_utm_resumo['total_demos'].sum()*100:.1f}% do total).")
+                
+                # Insight 2: Campanha com melhor conversão
+                df_conv = df_utm_resumo[(df_utm_resumo['Campanha/Fonte'] != '(não informado)') & (df_utm_resumo['total_demos'] >= 3) & (df_utm_resumo['convertidos'] > 0)]
+                if not df_conv.empty:
+                    best_conv = df_conv.nlargest(1, 'taxa_conversao')
+                    insights.append(f"💰 **Melhor conversão:** A campanha **{best_conv['Campanha/Fonte'].iloc[0]}** tem taxa de conversão de {best_conv['taxa_conversao'].iloc[0]:.1f}%.")
+                
+                # Insight 3: Campanha problemática
+                df_prob = df_utm_resumo[(df_utm_resumo['Campanha/Fonte'] != '(não informado)') & (df_utm_resumo['total_demos'] >= 5) & (df_utm_resumo['taxa_desqualificacao'] > 50)]
+                if not df_prob.empty:
+                    worst = df_prob.nlargest(1, 'taxa_desqualificacao')
+                    insights.append(f"⚠️ **Atenção:** A campanha **{worst['Campanha/Fonte'].iloc[0]}** tem {worst['taxa_desqualificacao'].iloc[0]:.1f}% de desqualificação. Considere revisar o público-alvo ou a qualificação.")
+                
+                # Insight 4: Leads sem UTM
+                sem_utm = df_utm_resumo[df_utm_resumo['Campanha/Fonte'] == '(não informado)']
+                if not sem_utm.empty and sem_utm['total_demos'].iloc[0] > 0:
+                    pct_sem_utm = sem_utm['total_demos'].iloc[0] / df_utm_resumo['total_demos'].sum() * 100
+                    insights.append(f"📊 **Rastreamento:** {pct_sem_utm:.1f}% das demos ({sem_utm['total_demos'].iloc[0]}) não possuem UTM. Melhore o tracking para análises mais precisas.")
+                
+                if insights:
+                    for insight in insights:
+                        st.markdown(insight)
+                else:
+                    st.info("Dados insuficientes para gerar insights automáticos.")
+        
+        else:
+            st.warning("⚠️ Colunas de UTM (utm_campaign, utm_source, utm_medium) não encontradas nos dados.")
+            st.caption("Verifique se os leads possuem informações de rastreamento de marketing.")
+        
+        st.markdown("")
+        
+        # ========================================
+        # SEÇÃO 3: TABELA DE DEMOS REALIZADAS
         # ========================================
         st.markdown("#### 📋 Lista de Demonstrações Realizadas")
         
@@ -2316,7 +2573,7 @@ with tab9:
         st.markdown("")
         
         # ========================================
-        # SEÇÃO 3: ANÁLISE DE DESQUALIFICAÇÕES
+        # SEÇÃO 4: ANÁLISE DE DESQUALIFICAÇÕES
         # ========================================
         if demos_desqualificadas > 0:
             st.markdown("#### ❌ Análise de Desqualificações")
@@ -2365,7 +2622,7 @@ with tab9:
             st.markdown("")
             
             # ========================================
-            # SEÇÃO 4: DESCRIÇÕES DAS DESQUALIFICAÇÕES
+            # SEÇÃO 5: DESCRIÇÕES DAS DESQUALIFICAÇÕES
             # ========================================
             if 'descricao_desqualificacao' in df_desqualificados.columns:
                 st.markdown("#### 📝 Descrições das Desqualificações")
