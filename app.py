@@ -1132,16 +1132,30 @@ def get_tempo_por_etapa():
 # Função para buscar dados de chamadas dos vendedores
 @st.cache_data(ttl=1800)
 def get_chamadas_vendedores(data_inicio, data_fim):
-    """Busca dados de chamadas dos vendedores no período"""
+    """Busca dados de chamadas dos vendedores no período com paginação"""
     try:
-        # Query para buscar chamadas com informações do vendedor
-        response = supabase.rpc('get_chamadas_vendedores', {
-            'data_inicio': data_inicio.isoformat(),
-            'data_fim': data_fim.isoformat()
-        }).execute()
+        all_data = []
+        page_size = 1000
+        offset = 0
         
-        if response.data:
-            df = pd.DataFrame(response.data)
+        while True:
+            # Query com paginação usando range
+            response = supabase.rpc('get_chamadas_vendedores', {
+                'data_inicio': data_inicio.isoformat(),
+                'data_fim': data_fim.isoformat()
+            }).range(offset, offset + page_size - 1).execute()
+            
+            if response.data:
+                all_data.extend(response.data)
+                # Se retornou menos que page_size, chegamos ao fim
+                if len(response.data) < page_size:
+                    break
+                offset += page_size
+            else:
+                break
+        
+        if all_data:
+            df = pd.DataFrame(all_data)
             # Converter duration de segundos para minutos
             if 'duration' in df.columns:
                 df['duration_minutos'] = df['duration'].apply(lambda x: round(x / 60, 2) if x > 0 else 0)
@@ -1713,12 +1727,17 @@ with tab7:
     st.caption("Métricas detalhadas de discagens, atendimentos e ligações efetivas")
     
     # Buscar dados de chamadas
-    df_chamadas = get_chamadas_vendedores(
-        datetime.combine(data_inicio, datetime.min.time()),
-        datetime.combine(data_fim, datetime.max.time())
-    )
+    data_inicio_query = datetime.combine(data_inicio, datetime.min.time())
+    data_fim_query = datetime.combine(data_fim, datetime.max.time())
+    
+    df_chamadas = get_chamadas_vendedores(data_inicio_query, data_fim_query)
     
     if not df_chamadas.empty:
+
+        df_chamadas['atendido_em'] = pd.to_datetime(df_chamadas['atendido_em'])
+        data_min = df_chamadas['atendido_em'].min()
+        data_max = df_chamadas['atendido_em'].max()
+        
         # Adicionar coluna duration_minutos se não existir
         if 'duration_minutos' not in df_chamadas.columns and 'duration' in df_chamadas.columns:
             df_chamadas['duration_minutos'] = df_chamadas['duration'] / 60
@@ -1754,6 +1773,126 @@ with tab7:
                 df_vendedor = df_chamadas.copy()
             
             st.markdown("---")
+            
+            # ========================================
+            # SEÇÃO 0: DISCAGENS POR VENDEDOR POR DIA
+            # ========================================
+            st.markdown("#### 📈 Discagens por Vendedor por Dia")
+            st.caption("Acompanhe a evolução diária das ligações de cada vendedor no período")
+            
+            # Preparar dados para o gráfico de linhas
+            df_chamadas['data'] = df_chamadas['atendido_em'].dt.date
+            
+            # Agrupar por data e vendedor
+            df_discagens_dia = df_chamadas.groupby(['data', 'name']).size().reset_index(name='discagens')
+            
+            # Criar label com nome e ramal
+            df_ramal = df_chamadas[['name', 'ramal']].drop_duplicates()
+            df_discagens_dia = df_discagens_dia.merge(df_ramal, on='name', how='left')
+            df_discagens_dia['vendedor_label'] = df_discagens_dia.apply(
+                lambda row: f"{row['name']} ({int(row['ramal'])})" if pd.notna(row['ramal']) else row['name'], 
+                axis=1
+            )
+            
+            # Ordenar vendedores por total de discagens (decrescente)
+            ordem_vendedores = df_discagens_dia.groupby('vendedor_label')['discagens'].sum().sort_values(ascending=False).index.tolist()
+            
+            # Garantir que todas as datas do período apareçam (mesmo sem discagens)
+            df_discagens_dia['data'] = pd.to_datetime(df_discagens_dia['data'])
+            
+            # Paleta de cores vibrantes e distintas
+            cores_vendedores = [
+                '#4A9FFF',  # Azul
+                '#FF6B6B',  # Vermelho coral
+                '#4ECDC4',  # Teal
+                '#FFE66D',  # Amarelo
+                '#95E1D3',  # Verde menta
+                '#F38181',  # Rosa salmão
+                '#AA96DA',  # Roxo lavanda
+                '#FF9F43',  # Laranja
+                '#26DE81',  # Verde limão
+                '#FD79A8',  # Rosa pink
+                '#A29BFE',  # Lilás
+                '#00CEC9',  # Ciano
+            ]
+            
+            # Criar gráfico de linhas
+            fig_discagens_dia = px.line(
+                df_discagens_dia,
+                x='data',
+                y='discagens',
+                color='vendedor_label',
+                labels={'data': '', 'discagens': '', 'vendedor_label': ''},
+                markers=True,
+                color_discrete_sequence=cores_vendedores,
+                category_orders={'vendedor_label': ordem_vendedores}
+            )
+            
+            fig_discagens_dia.update_layout(
+                height=500,
+                hovermode='x unified',
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="center",
+                    x=0.5,
+                    font=dict(size=14, color='#ffffff'),
+                    bgcolor='rgba(0,0,0,0)',
+                    itemsizing='constant'
+                ),
+                xaxis=dict(
+                    tickformat='%d/%m',
+                    tickangle=0,
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)',
+                    showgrid=True,
+                    dtick='D1',  # Um tick por dia
+                    tickmode='auto',
+                    nticks=30
+                ),
+                yaxis=dict(
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)',
+                    showgrid=True,
+                    zeroline=False
+                ),
+                margin=dict(l=20, r=20, t=60, b=40),
+                hoverlabel=dict(
+                    bgcolor='#2d3748',
+                    font_size=14,
+                    font_family="Arial"
+                )
+            )
+            
+            # Estilizar as linhas e marcadores
+            fig_discagens_dia.update_traces(
+                line=dict(width=2.5),
+                marker=dict(size=8, line=dict(width=1, color='#1a1f2e')),
+                hovertemplate='<b>%{y}</b> discagens<extra>%{fullData.name}</extra>'
+            )
+            
+            st.plotly_chart(fig_discagens_dia, use_container_width=True)
+            
+            # Mini resumo abaixo do gráfico
+            col_resumo2, col_resumo3, col_resumo4 = st.columns(3)
+            
+            with col_resumo2:
+                media_dia = df_discagens_dia.groupby('data')['discagens'].sum().mean()
+                st.metric("📊 Média Discagens por Dia", f"{media_dia:.0f}")
+            
+            with col_resumo3:
+                melhor_dia = df_discagens_dia.groupby('data')['discagens'].sum().idxmax()
+                max_discagens = df_discagens_dia.groupby('data')['discagens'].sum().max()
+                st.metric("🏆 Melhor Dia", f"{melhor_dia.strftime('%d/%m')}", delta=f"{int(max_discagens)} disc.")
+            
+            with col_resumo4:
+                vendedores_ativos = df_discagens_dia['vendedor_label'].nunique()
+                st.metric("👥 Vendedores Ativos", f"{vendedores_ativos}")
+            
+            st.markdown("")
             
             # ========================================
             # SEÇÃO 1: MÉTRICAS PRINCIPAIS
