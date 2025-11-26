@@ -1826,8 +1826,8 @@ with tab7:
                     'Quantidade': [total_efetivas, total_atendidas, total_discagens],
                     'Percentual': [taxa_conversao_geral, taxa_atendimento, 100],
                     'Label': [
-                        f'{total_efetivas} ({taxa_conversao_geral:.1f}%)',
-                        f'{total_atendidas} ({taxa_atendimento:.1f}%)',
+                        f'({taxa_conversao_geral:.1f}%)',
+                        f'({taxa_atendimento:.1f}%)',
                         f''
                     ]
                 })
