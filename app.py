@@ -1144,7 +1144,7 @@ def get_chamadas_vendedores(data_inicio, data_fim):
             df = pd.DataFrame(response.data)
             # Converter duration de segundos para minutos
             if 'duration' in df.columns:
-                df['duration_minutos'] = df['duration'] / 60
+                df['duration_minutos'] = df['duration'].apply(lambda x: round(x / 60, 2) if x > 0 else 0)
             return df
         else:
             return pd.DataFrame()
@@ -1709,8 +1709,8 @@ with tab6:
 # ABA 7: PRODUTIVIDADE DO VENDEDOR
 # ========================================
 with tab7:
-    st.markdown("### 📞 Produtividade do Vendedor")
-    st.caption("Análise de chamadas e desempenho dos vendedores")
+    st.markdown("### 📞 Produtividade do Vendedor - Análise de Chamadas")
+    st.caption("Métricas detalhadas de discagens, atendimentos e ligações efetivas")
     
     # Buscar dados de chamadas
     df_chamadas = get_chamadas_vendedores(
@@ -1719,174 +1719,499 @@ with tab7:
     )
     
     if not df_chamadas.empty:
-        # Filtrar por vendedores selecionados se houver
-        if vendedores_selecionados:
-            df_chamadas = df_chamadas[df_chamadas['name'].isin(vendedores_selecionados)]
+        # Adicionar coluna duration_minutos se não existir
+        if 'duration_minutos' not in df_chamadas.columns and 'duration' in df_chamadas.columns:
+            df_chamadas['duration_minutos'] = df_chamadas['duration'] / 60
+        
+        # Classificar tipos de ligação
+        df_chamadas['tipo_ligacao'] = df_chamadas['causa_desligamento'].apply(
+            lambda x: 'Atendida' if x == 'Atendida' else 'Não Atendida'
+        )
+        
+        # Definir ligações efetivas (atendidas com duração > 50 segundos)
+        df_chamadas['efetiva'] = (
+            (df_chamadas['causa_desligamento'] == 'Atendida') & 
+            (df_chamadas['duration'] > 50)
+        )
         
         if not df_chamadas.empty:
             # ========================================
-            # SEÇÃO 1: MÉTRICAS GERAIS
+            # SELETOR DE VENDEDOR
             # ========================================
-            st.markdown("#### 📊 Métricas Gerais")
+            st.markdown("#### 👤 Seleção de Vendedor")
             
-            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            vendedores_disponiveis = ['Todos'] + sorted(df_chamadas['name'].dropna().unique().tolist())
+            vendedor_selecionado = st.selectbox(
+                "Escolha um vendedor para análise detalhada:",
+                vendedores_disponiveis,
+                key="vendedor_prod_select"
+            )
             
-            with col_m1:
-                total_chamadas = len(df_chamadas)
-                st.metric("☎️ Total de Chamadas", f"{total_chamadas:,}".replace(",", "."))
+            # Filtrar dados pelo vendedor selecionado
+            if vendedor_selecionado != 'Todos':
+                df_vendedor = df_chamadas[df_chamadas['name'] == vendedor_selecionado].copy()
+            else:
+                df_vendedor = df_chamadas.copy()
             
-            with col_m2:
-                if 'duration_minutos' in df_chamadas.columns:
-                    tmd = df_chamadas['duration_minutos'].mean()
-                    st.metric("⏱️ TMD (Tempo Médio)", f"{tmd:.1f} min")
-                else:
-                    st.metric("⏱️ TMD (Tempo Médio)", "N/A")
-            
-            with col_m3:
-                duracao_total = df_chamadas['duration'].sum() / 60  # em minutos
-                horas_totais = duracao_total / 60  # em horas
-                if horas_totais < 1:
-                    st.metric("⏳ Duração Total", f"{duracao_total:.0f} min")
-                else:
-                    st.metric("⏳ Duração Total", f"{horas_totais:.1f}h")
-            
-            with col_m4:
-                vendedores_unicos = df_chamadas['name'].nunique() if 'name' in df_chamadas.columns else 0
-                st.metric("👥 Vendedores", f"{vendedores_unicos}")
-            
-            st.markdown("")
+            st.markdown("---")
             
             # ========================================
-            # SEÇÃO 2: CHAMADAS POR VENDEDOR
+            # SEÇÃO 1: MÉTRICAS PRINCIPAIS
             # ========================================
-            st.markdown("#### 👥 Chamadas por Vendedor")
+            st.markdown("#### 📊 Métricas de Performance")
             
-            if 'name' in df_chamadas.columns:
-                df_vendedores = df_chamadas.groupby('name').agg({
-                    'id': 'count',
-                    'duration_minutos': ['mean', 'sum']
-                }).reset_index()
-                
-                df_vendedores.columns = ['Vendedor', 'Total de Chamadas', 'TMD (minutos)', 'Duração Total (minutos)']
-                df_vendedores['TMD (minutos)'] = df_vendedores['TMD (minutos)'].round(2)
-                df_vendedores['Duração Total (minutos)'] = df_vendedores['Duração Total (minutos)'].round(0)
-                df_vendedores = df_vendedores.sort_values('Total de Chamadas', ascending=False)
-                
-                # Gráfico de barras - Total de Chamadas
-                col_chart1, col_chart2 = st.columns(2)
-                
-                with col_chart1:
-                    fig_vendedores = px.bar(
-                        df_vendedores,
-                        x='Vendedor',
-                        y='Total de Chamadas',
-                        title='Total de Chamadas por Vendedor',
-                        labels={'Vendedor': 'Vendedor', 'Total de Chamadas': 'Quantidade'},
-                        color='Total de Chamadas',
-                        color_continuous_scale='Viridis'
-                    )
-                    fig_vendedores.update_layout(height=400, xaxis_tickangle=-45)
-                    st.plotly_chart(fig_vendedores, use_container_width=True)
-                
-                with col_chart2:
-                    # Gráfico de ligações por dia
-                    if 'atendido_em' in df_chamadas.columns:
-                        df_chamadas_copy = df_chamadas.copy()
-                        df_chamadas_copy['atendido_em'] = pd.to_datetime(df_chamadas_copy['atendido_em'])
-                        df_chamadas_copy['data'] = df_chamadas_copy['atendido_em'].dt.date
-                        
-                        df_por_dia = df_chamadas_copy.groupby(['name', 'data']).size().reset_index(name='chamadas')
-                        df_por_dia.columns = ['Vendedor', 'Data', 'Chamadas']
-                        df_por_dia['Data'] = pd.to_datetime(df_por_dia['Data']).dt.strftime('%d/%m')
-                        
-                        fig_por_dia = px.line(
-                            df_por_dia,
-                            x='Data',
-                            y='Chamadas',
-                            color='Vendedor',
-                            title='Ligações por Dia (Comparação)',
-                            labels={'Data': 'Data', 'Chamadas': 'Quantidade'},
-                            markers=True
-                        )
-                        fig_por_dia.update_layout(height=400, hovermode='x unified')
-                        st.plotly_chart(fig_por_dia, use_container_width=True)
-                
-                # Tabela de vendedores
-                st.dataframe(
-                    df_vendedores,
-                    column_config={
-                        "Vendedor": st.column_config.TextColumn("Vendedor"),
-                        "Total de Chamadas": st.column_config.NumberColumn("Chamadas", format="%d"),
-                        "TMD (minutos)": st.column_config.NumberColumn("TMD (min)", format="%.2f"),
-                        "Duração Total (minutos)": st.column_config.NumberColumn("Total (min)", format="%.0f")
-                    },
-                    hide_index=True,
-                    width='stretch',
-                    height=min(300, len(df_vendedores) * 35 + 100)
+            total_discagens = len(df_vendedor)
+            total_atendidas = len(df_vendedor[df_vendedor['causa_desligamento'] == 'Atendida'])
+            total_efetivas = df_vendedor['efetiva'].sum()
+            
+            # Calcular taxas
+            taxa_atendimento = (total_atendidas / total_discagens * 100) if total_discagens > 0 else 0
+            taxa_efetividade = (total_efetivas / total_atendidas * 100) if total_atendidas > 0 else 0
+            taxa_conversao_geral = (total_efetivas / total_discagens * 100) if total_discagens > 0 else 0
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            
+            with col1:
+                st.metric(
+                    "📞 Total Discagens",
+                    f"{total_discagens:,}".replace(",", "."),
+                    help="Todas as tentativas de ligação"
+                )
+            
+            with col2:
+                st.metric(
+                    "✅ Atendidas",
+                    f"{total_atendidas:,}".replace(",", "."),
+                    delta=f"{taxa_atendimento:.1f}%",
+                    help="Ligações que foram atendidas"
+                )
+            
+            with col3:
+                st.metric(
+                    "🎯 Efetivas",
+                    f"{total_efetivas:,}".replace(",", "."),
+                    delta=f"{taxa_conversao_geral:.1f}%",
+                    help="Ligações atendidas com duração > 50s"
+                )
+            
+            with col4:
+                tmd_atendidas = df_vendedor[df_vendedor['causa_desligamento'] == 'Atendida']['duration_minutos'].mean()
+                st.metric(
+                    "⏱️ TMD Atendidas",
+                    f"{tmd_atendidas:.1f} min" if pd.notna(tmd_atendidas) else "N/A",
+                    help="Tempo médio de duração das ligações atendidas"
+                )
+            
+            with col5:
+                tmd_efetivas = df_vendedor[df_vendedor['efetiva']]['duration_minutos'].mean()
+                st.metric(
+                    "⏱️ TMD Efetivas",
+                    f"{tmd_efetivas:.1f} min" if pd.notna(tmd_efetivas) else "N/A",
+                    help="Tempo médio de duração das ligações efetivas"
                 )
             
             st.markdown("")
             
             # ========================================
-            # SEÇÃO 3: RELATÓRIO DETALHADO DE CHAMADAS
+            # SEÇÃO 2: FUNIL DE CONVERSÃO
             # ========================================
-            st.markdown("#### 📋 Relatório Detalhado de Chamadas")
+            st.markdown("#### 🔄 Funil de Conversão de Chamadas")
             
-            # Preparar dados para tabela
-            df_relatorio = df_chamadas.copy()
+            col_funil1, col_funil2 = st.columns([2, 1])
             
-            # Renomear e formatar colunas
-            if 'name' in df_relatorio.columns:
-                df_relatorio = df_relatorio.rename(columns={
+            with col_funil1:
+                # Criar dados do funil (ordem invertida para visualização)
+                funil_data = pd.DataFrame({
+                    'Etapa': ['Efetivas', 'Atendidas', 'Discagens'],
+                    'Quantidade': [total_efetivas, total_atendidas, total_discagens],
+                    'Percentual': [taxa_conversao_geral, taxa_atendimento, 100],
+                    'Label': [
+                        f'{total_efetivas} ({taxa_conversao_geral:.1f}%)',
+                        f'{total_atendidas} ({taxa_atendimento:.1f}%)',
+                        f''
+                    ]
+                })
+                
+                fig_funil = px.funnel(
+                    funil_data,
+                    x='Quantidade',
+                    y='Etapa',
+                    title=f'Funil de Conversão - {vendedor_selecionado}',
+                    color='Etapa',
+                    text='Label',
+                    color_discrete_map={'Efetivas': '#4CAF50', 'Atendidas': '#FFA500', 'Discagens': '#4A9FFF'}
+                )
+                fig_funil.update_traces(textposition='outside', textfont_size=18, textfont=dict(family="Arial", color="white", weight="bold"))
+                fig_funil.update_yaxes(categoryorder='array', categoryarray=['Discagens', 'Atendidas', 'Efetivas'], tickfont=dict(size=18))
+                fig_funil.update_layout(height=610, yaxis_title='')
+                st.plotly_chart(fig_funil, use_container_width=True)
+            
+            with col_funil2:
+                st.markdown("**Taxas de Conversão**")
+                st.markdown("")
+                
+                st.metric("📊 Taxa de Atendimento", f"{taxa_atendimento:.1f}%")
+                st.caption(f"{total_atendidas} de {total_discagens} discagens")
+                
+                st.markdown("")
+                
+                st.metric("🎯 Taxa de Efetividade", f"{taxa_efetividade:.1f}%")
+                st.caption(f"{total_efetivas} de {total_atendidas} atendidas")
+                
+                st.markdown("")
+                
+                st.metric("💯 Conversão Geral", f"{taxa_conversao_geral:.1f}%")
+                st.caption(f"{total_efetivas} de {total_discagens} discagens")
+            
+            st.markdown("")
+            
+            # ========================================
+            # SEÇÃO 3: RANKING DE VENDEDORES (se Todos estiver selecionado)
+            # ========================================
+            if vendedor_selecionado == 'Todos':
+                st.markdown("#### 🏆 Ranking de Vendedores")
+                
+                # Agregar métricas por vendedor
+                df_ranking = df_chamadas.groupby('name').agg({
+                    'id': 'count',
+                    'causa_desligamento': lambda x: (x == 'Atendida').sum(),
+                    'efetiva': 'sum',
+                    'duration_minutos': lambda x: x[df_chamadas.loc[x.index, 'causa_desligamento'] == 'Atendida'].mean()
+                }).reset_index()
+                
+                df_ranking.columns = ['Vendedor', 'Discagens', 'Atendidas', 'Efetivas', 'TMD (min)']
+                
+                # Calcular taxas
+                df_ranking['Taxa Atend. (%)'] = (df_ranking['Atendidas'] / df_ranking['Discagens'] * 100).round(1)
+                df_ranking['Taxa Efet. (%)'] = (df_ranking['Efetivas'] / df_ranking['Discagens'] * 100).round(1)
+                df_ranking['TMD (min)'] = df_ranking['TMD (min)'].round(1)
+                
+                # Ordenar por efetivas
+                df_ranking = df_ranking.sort_values('Efetivas', ascending=False)
+                
+                col_rank1, col_rank2 = st.columns(2)
+                
+                with col_rank1:
+                    # Gráfico de barras - Ligações Efetivas
+                    fig_ranking = px.bar(
+                        df_ranking,
+                        x='Vendedor',
+                        y='Efetivas',
+                        title='Ranking - Ligações Efetivas por Vendedor',
+                        color='Efetivas',
+                        color_continuous_scale='Greens',
+                        text='Efetivas'
+                    )
+                    fig_ranking.update_traces(textposition='outside', textfont_size=14)
+                    fig_ranking.update_xaxes(tickfont=dict(size=12), tickangle=-45)
+                    fig_ranking.update_layout(height=400, coloraxis_colorbar=dict(tickfont=dict(size=12)))
+                    st.plotly_chart(fig_ranking, use_container_width=True)
+                
+                with col_rank2:
+                    # Gráfico de dispersão - Taxa de Efetividade vs Volume
+                    fig_scatter = px.scatter(
+                        df_ranking,
+                        x='Discagens',
+                        y='Taxa Efet. (%)',
+                        size='Efetivas',
+                        color='Vendedor',
+                        title='Eficiência vs Volume',
+                        labels={'Discagens': 'Volume de Discagens', 'Taxa Efet. (%)': 'Taxa de Efetividade (%)'},
+                        hover_data=['Atendidas', 'Efetivas', 'TMD (min)']
+                    )
+                    fig_scatter.update_layout(height=400, showlegend=True)
+                    fig_scatter.update_xaxes(tickfont=dict(size=16))
+                    fig_scatter.update_yaxes(tickfont=dict(size=16))
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+                
+                # Tabela de ranking
+                st.dataframe(
+                    df_ranking,
+                    column_config={
+                        "Vendedor": st.column_config.TextColumn("Vendedor", width="medium"),
+                        "Discagens": st.column_config.NumberColumn("Discagens", format="%d"),
+                        "Atendidas": st.column_config.NumberColumn("Atendidas", format="%d"),
+                        "Efetivas": st.column_config.NumberColumn("Efetivas", format="%d"),
+                        "Taxa Atend. (%)": st.column_config.NumberColumn("Taxa Atend.", format="%.1f%%"),
+                        "Taxa Efet. (%)": st.column_config.NumberColumn("Taxa Efet.", format="%.1f%%"),
+                        "TMD (min)": st.column_config.NumberColumn("TMD", format="%.1f")
+                    },
+                    hide_index=True,
+                    width='stretch',
+                    height=min(400, len(df_ranking) * 35 + 100)
+                )
+                
+                st.markdown("")
+            
+            # ========================================
+            # SEÇÃO 4: DISTRIBUIÇÃO DE RESULTADOS
+            # ========================================
+            st.markdown("#### 📈 Análise de Resultados das Chamadas")
+            
+            col_dist1, col_dist2 = st.columns(2)
+            
+            with col_dist1:
+                # Distribuição por motivo de desligamento
+                df_motivos = df_vendedor['causa_desligamento'].value_counts().reset_index()
+                df_motivos.columns = ['Motivo', 'Quantidade']
+                
+                fig_motivos = px.bar(
+                    df_motivos,
+                    y='Motivo',
+                    x='Quantidade',
+                    title='Distribuição por Resultado',
+                    orientation='h',
+                    color='Quantidade',
+                    color_continuous_scale='Blues',
+                    text='Quantidade'
+                )
+                fig_motivos.update_traces(textposition='outside', textfont_size=16)
+                fig_motivos.update_yaxes(categoryorder='total descending', tickfont=dict(size=14))
+                fig_motivos.update_xaxes(showticklabels=False)
+                fig_motivos.update_layout(height=400, yaxis_title='', xaxis_title='', coloraxis_colorbar=dict(tickfont=dict(size=14)))
+                st.plotly_chart(fig_motivos, use_container_width=True)
+            
+            with col_dist2:
+                # Distribuição de duração (apenas atendidas)
+                df_atendidas_duracao = df_vendedor[df_vendedor['causa_desligamento'] == 'Atendida'].copy()
+                
+                if not df_atendidas_duracao.empty:
+                    fig_duracao = px.histogram(
+                        df_atendidas_duracao,
+                        x='duration_minutos',
+                        nbins=20,
+                        title='Distribuição de Duração (Ligações Atendidas)',
+                        labels={'duration_minutos': 'Duração (minutos)', 'count': 'Ligações'},
+                        color_discrete_sequence=['#4A9FFF'],
+                        text_auto=True
+                    )
+                    fig_duracao.update_traces(textposition='outside', textfont_size=14, marker_line_width=1.5)
+                    fig_duracao.update_layout(height=400, showlegend=False, bargap=0.1)
+                    # Calcular o máximo valor para limitar o range
+                    max_count = len(df_atendidas_duracao)
+                    fig_duracao.update_yaxes(title_text='Ligações', range=[0, max_count * 0.9], showticklabels=False)
+                    fig_duracao.add_vline(x=50/60, line_dash="dash", line_color="red", 
+                                         annotation_text="Limite Efetiva (50s)")
+                    st.plotly_chart(fig_duracao, use_container_width=True)
+                else:
+                    st.info("Sem ligações atendidas para análise de duração")
+            
+            st.markdown("")
+            
+            # ========================================
+            # SEÇÃO 5: TABELA DE LIGAÇÕES EFETIVAS
+            # ========================================
+            st.markdown("#### 🎯 Ligações Efetivas (Duração > 50s)")
+            
+            df_efetivas = df_vendedor[df_vendedor['efetiva']].copy()
+            
+            if not df_efetivas.empty:
+                # Preparar dados
+                df_efetivas_display = df_efetivas[['name', 'atendente', 'ramal', 'atendido_em', 'duration', 'url_gravacao']].copy()
+                df_efetivas_display['atendido_em'] = pd.to_datetime(df_efetivas_display['atendido_em'])
+                df_efetivas_display = df_efetivas_display.sort_values('atendido_em', ascending=False)
+                
+                df_efetivas_display['duration_formatada'] = df_efetivas_display['duration'].apply(
+                    lambda x: f"{int(x//60)}:{int(x%60):02d}" if pd.notna(x) else "N/A"
+                )
+                df_efetivas_display['atendido_em_formatado'] = df_efetivas_display['atendido_em'].dt.strftime('%d/%m/%Y %H:%M')
+                
+                df_efetivas_display = df_efetivas_display.rename(columns={
                     'name': 'Vendedor',
                     'atendente': 'Atendente',
-                    'atendido_em': 'Atendido em',
-                    'finalizado_em': 'Finalizado em',
-                    'duration_minutos': 'Duração (min)',
-                    'causa_desligamento': 'Motivo',
                     'ramal': 'Ramal',
                     'url_gravacao': 'Gravação'
                 })
+                
+                st.info(f"📊 Total de {len(df_efetivas_display)} ligações efetivas encontradas")
+                
+                st.dataframe(
+                    df_efetivas_display[['Vendedor', 'Atendente', 'Ramal', 'atendido_em_formatado', 'duration_formatada', 'Gravação']],
+                    column_config={
+                        "Vendedor": st.column_config.TextColumn("Vendedor"),
+                        "Atendente": st.column_config.TextColumn("Atendente"),
+                        "Ramal": st.column_config.NumberColumn("Ramal", format="%d"),
+                        "atendido_em_formatado": st.column_config.TextColumn("Data/Hora"),
+                        "duration_formatada": st.column_config.TextColumn("Duração"),
+                        "Gravação": st.column_config.LinkColumn("🔊 Gravação", display_text="Ouvir")
+                    },
+                    hide_index=True,
+                    width='stretch',
+                    height=min(400, len(df_efetivas_display) * 35 + 100)
+                )
+            else:
+                st.warning("⚠️ Nenhuma ligação efetiva encontrada no período selecionado")
             
-            # Converter timestamps
-            if 'Atendido em' in df_relatorio.columns:
-                df_relatorio['Atendido em'] = pd.to_datetime(df_relatorio['Atendido em'])
-                df_relatorio['Atendido em'] = df_relatorio['Atendido em'].dt.strftime('%d/%m/%Y %H:%M')
+            st.markdown("")
             
-            if 'Finalizado em' in df_relatorio.columns:
-                df_relatorio['Finalizado em'] = pd.to_datetime(df_relatorio['Finalizado em'])
-                df_relatorio['Finalizado em'] = df_relatorio['Finalizado em'].dt.strftime('%d/%m/%Y %H:%M')
+            # ========================================
+            # SEÇÃO 6: TABELA DE TODAS AS DISCAGENS
+            # ========================================
+            st.markdown("#### 📞 Histórico Completo de Discagens")
             
-            # Selecionar colunas para exibição
-            colunas_exibicao = [col for col in ['Vendedor', 'Atendente', 'Ramal', 'Atendido em', 'Duração (min)', 'Motivo', 'Gravação'] 
-                               if col in df_relatorio.columns]
-            df_relatorio_exibicao = df_relatorio[colunas_exibicao].copy()
+            # Preparar dados
+            df_discagens = df_vendedor.copy()
+            df_discagens['atendido_em'] = pd.to_datetime(df_discagens['atendido_em'])
+            df_discagens = df_discagens.sort_values('atendido_em', ascending=False)
             
-            # Formatar coluna de duração
-            if 'Duração (min)' in df_relatorio_exibicao.columns:
-                df_relatorio_exibicao['Duração (min)'] = df_relatorio_exibicao['Duração (min)'].round(1)
+            df_discagens['duration_formatada'] = df_discagens['duration'].apply(
+                lambda x: f"{int(x//60)}:{int(x%60):02d}" if pd.notna(x) and x > 0 else "0:00"
+            )
+            df_discagens['atendido_em_formatado'] = df_discagens['atendido_em'].dt.strftime('%d/%m/%Y %H:%M')
             
-            # Criar coluna com link da gravação
-            column_config_dict = {}
-            for col in df_relatorio_exibicao.columns:
-                if col == 'Gravação':
-                    column_config_dict[col] = st.column_config.LinkColumn("🔊 Gravação")
-                elif col == 'Duração (min)':
-                    column_config_dict[col] = st.column_config.NumberColumn("Duração (min)", format="%.1f")
-                elif col in ['Atendido em', 'Finalizado em']:
-                    column_config_dict[col] = st.column_config.TextColumn(col)
-                else:
-                    column_config_dict[col] = st.column_config.TextColumn(col)
+            df_discagens_display = df_discagens.rename(columns={
+                'name': 'Vendedor',
+                'atendente': 'Atendente',
+                'ramal': 'Ramal',
+                'causa_desligamento': 'Resultado',
+                'url_gravacao': 'Gravação'
+            })
+            
+            # Adicionar coluna de status visual
+            df_discagens_display['Status'] = df_discagens_display.apply(
+                lambda row: '🎯 Efetiva' if row['efetiva'] else ('✅ Atendida' if row['Resultado'] == 'Atendida' else '❌ Não Atendida'),
+                axis=1
+            )
+            
+            st.info(f"📊 Total de {len(df_discagens_display)} discagens no período")
             
             st.dataframe(
-                df_relatorio_exibicao.sort_values('Atendido em', ascending=False),
-                column_config=column_config_dict,
+                df_discagens_display[['Vendedor', 'Atendente', 'Ramal', 'atendido_em_formatado', 'duration_formatada', 'Resultado', 'Status', 'Gravação']],
+                column_config={
+                    "Vendedor": st.column_config.TextColumn("Vendedor"),
+                    "Atendente": st.column_config.TextColumn("Atendente"),
+                    "Ramal": st.column_config.NumberColumn("Ramal", format="%d"),
+                    "atendido_em_formatado": st.column_config.TextColumn("Data/Hora"),
+                    "duration_formatada": st.column_config.TextColumn("Duração"),
+                    "Resultado": st.column_config.TextColumn("Resultado"),
+                    "Status": st.column_config.TextColumn("Status"),
+                    "Gravação": st.column_config.LinkColumn("🔊 Gravação", display_text="Ouvir")
+                },
                 hide_index=True,
                 width='stretch',
-                height=min(600, len(df_relatorio_exibicao) * 35 + 100)
+                height=min(500, len(df_discagens_display) * 35 + 100)
             )
             
             st.markdown("")
+            
+            # ========================================
+            # SEÇÃO 7: INSIGHTS ADICIONAIS
+            # ========================================
+            st.markdown("### 💡 Insights e Recomendações Detalhadas")
+            
+            col_ins1, col_ins2, col_ins3 = st.columns(3)
+            
+            # Calcular métricas adicionais para insights
+            if 'atendido_em' in df_vendedor.columns:
+                df_vendedor['hora'] = pd.to_datetime(df_vendedor['atendido_em']).dt.hour
+                # Top 3 horários com mais ligações efetivas
+                top_horarios = df_vendedor[df_vendedor['efetiva']].groupby('hora').size().sort_values(ascending=False).head(3) if df_vendedor['efetiva'].sum() > 0 else None
+            else:
+                top_horarios = None
+            
+            with col_ins1:
+                if top_horarios is not None and len(top_horarios) > 0:
+                    # Construir HTML para os top 3 horários
+                    medals = ["🥇", "🥈", "🥉"]
+                    horarios_list = []
+                    for i, (hora, qtd) in enumerate(top_horarios.items()):
+                        medal = medals[i] if i < 3 else ""
+                        hora_int = int(hora)
+                        qtd_int = int(qtd)
+                        horarios_list.append(
+                            '<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">'
+                            f'<span style="font-size: 1.1rem; color: #ffffff;">{medal} {hora_int}h - {hora_int+1}h</span>'
+                            f'<span style="font-size: 1.1rem; font-weight: 700; color: #20B2AA;">{qtd_int} efetivas</span>'
+                            '</div>'
+                        )
+                    horarios_html = "".join(horarios_list)
+                    
+                    html_card1 = (
+                        '<div class="metric-card">'
+                        '<h4 style="margin-top: 0; color: #20B2AA;">🕐 Top 3 Melhores Horários</h4>'
+                        '<p style="font-size: 0.85rem; color: #CBD5E0; margin-bottom: 15px;">Horários com mais ligações efetivas</p>'
+                        f'{horarios_html}'
+                        '<p style="font-size: 0.85rem; color: #CBD5E0; margin-bottom: 0; margin-top: 12px;">'
+                        '💡 <b>Dica:</b> Concentre as ligações nesses horários para maximizar resultados.'
+                        '</p>'
+                        '</div>'
+                    )
+                    st.markdown(html_card1, unsafe_allow_html=True)
+                else:
+                    st.info("📊 Dados insuficientes para análise de horário")
+            
+            with col_ins2:
+                # Definir cores e textos
+                if taxa_conversao_geral >= 15:
+                    status_color = "#48bb78" # Green
+                    status_text = "EXCELENTE"
+                    status_icon = "✅"
+                elif taxa_conversao_geral >= 10:
+                    status_color = "#4299e1" # Blue
+                    status_text = "BOM"
+                    status_icon = "⚠️"
+                else:
+                    status_color = "#f56565" # Red
+                    status_text = "ATENÇÃO"
+                    status_icon = "📉"
+                
+                html_card2 = f"""
+                <div class="metric-card">
+                    <h4 style="margin-top: 0; color: #20B2AA;">📊 Performance</h4>
+                    <div style="text-align: center; margin: 15px 0;">
+                        <span style="font-size: 1.5rem; font-weight: 800; color: {status_color};">{status_icon} {status_text}</span><br>
+                        <span style="font-size: 0.9rem; color: #CBD5E0;">Conversão Geral: <b style="color: #ffffff;">{taxa_conversao_geral:.1f}%</b></span>
+                    </div>
+                    <hr style="margin: 10px 0; border-color: rgba(32, 178, 170, 0.2);">
+                    <div style="display: flex; justify-content: space-between;">
+                        <div style="text-align: center;">
+                            <span style="font-size: 0.8rem; color: #CBD5E0;">Atendimento</span><br>
+                            <span style="font-size: 1.1rem; font-weight: 600; color: #ffffff;">{taxa_atendimento:.1f}%</span>
+                        </div>
+                        <div style="text-align: center;">
+                            <span style="font-size: 0.8rem; color: #CBD5E0;">Efetividade</span><br>
+                            <span style="font-size: 1.1rem; font-weight: 600; color: #ffffff;">{taxa_efetividade:.1f}%</span>
+                        </div>
+                    </div>
+                </div>
+                """
+                st.markdown(html_card2, unsafe_allow_html=True)
+            
+            with col_ins3:
+                meta_efetivas = int(total_discagens * 0.15)  # Meta: 15% de conversão
+                diff_meta = total_efetivas - meta_efetivas
+                percentual_meta = (total_efetivas / meta_efetivas * 100) if meta_efetivas > 0 else 0
+                
+                if diff_meta >= 0:
+                    meta_color = "#48bb78" # Green
+                    meta_msg = f"✅ <b>Meta Atingida!</b> +{diff_meta} ligações"
+                else:
+                    meta_color = "#ed8936" # Orange
+                    meta_msg = f"📊 <b>Faltam {abs(diff_meta)}</b> ligações"
+                
+                # Limit progress bar to 100%
+                prog_width = int(min(percentual_meta, 100))
+                total_efetivas_int = int(total_efetivas)
+                
+                html_card3 = f"""
+                <div class="metric-card">
+                    <h4 style="margin-top: 0; color: #20B2AA;">🎯 Meta Efetivas</h4>
+                    <span style="color: #20B2AA;">(15% do total de discagens)</span>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 15px;">
+                        <div>
+                            <span style="font-size: 2rem; font-weight: 800; color: #ffffff;">{total_efetivas_int}</span>
+                            <span style="font-size: 0.9rem; color: #CBD5E0;"> / {meta_efetivas}</span>
+                        </div>
+                        <span style="font-size: 1.2rem; font-weight: 700; color: {meta_color};">{percentual_meta:.0f}%</span>
+                    </div>
+                    <div style="width: 100%%; background-color: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; margin: 10px 0;">
+                        <div style="width: {prog_width}%%; background-color: {meta_color}; height: 8px; border-radius: 4px;"></div>
+                    </div>
+                    <p style="font-size: 0.9rem; color: {meta_color}; margin-bottom: 0; margin-top: 5px;">{meta_msg}</p>
+                </div>
+                """
+                st.markdown(html_card3, unsafe_allow_html=True)
+            
         else:
             st.info("Nenhuma chamada encontrada para os vendedores selecionados no período.")
     else:
