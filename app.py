@@ -167,7 +167,10 @@ def gerar_insights_ia(metricas_atual, metricas_anterior, periodo_descricao):
         var_convertidos_pct = ((metricas_atual['leads_convertidos'] - metricas_anterior['leads_convertidos']) / metricas_anterior['leads_convertidos'] * 100) if metricas_anterior['leads_convertidos'] > 0 else 0
         
         # Preparar dados para análise
-        prompt = f"""Você é um analista de dados especializado em vendas e CRM. Analise os seguintes dados de performance de leads e forneça insights acionáveis em português do Brasil.
+        prompt = f"""Você é um analista sênior de vendas especializado em concessionárias de veículos com expertise em análise de funil de conversão e otimização de processos comerciais.
+
+**CONTEXTO DO NEGÓCIO:**
+Concessionária de veículos com processo de vendas em múltiplas etapas: geração de leads → agendamento de test-drive (demo) → realização do test-drive → fechamento da venda.
 
 PERÍODO ANALISADO: {periodo_descricao}
 
@@ -185,20 +188,30 @@ COMPARAÇÃO COM PERÍODO ANTERIOR:
 - No-shows: {metricas_anterior['noshow_count']} (Variação: {var_noshow:+d})
 - Convertidos: {metricas_anterior['leads_convertidos']} (Variação: {var_convertidos:+d}, {var_convertidos_pct:+.1f}%)
 
-Por favor, forneça:
-1. Um resumo executivo (2-3 frases) sobre a performance geral
-2. Identifique o principal gargalo no funil de vendas
-3. Liste 3 recomendações práticas e acionáveis para melhorar os resultados
+**FORMATO DA RESPOSTA:**
 
-Utilize um markdown leve para formatação da resposta.
-Seja direto, objetivo e use linguagem de negócios. Foque em insights que gerem ação."""
+## 📊 Resumo Executivo
+[2-3 frases destacando a performance geral e a principal tendência observada. Inclua pelo menos uma métrica percentual comparativa.]
 
-        # Combinar system prompt com user prompt para Gemini
-        full_prompt = f"""Você é um analista de vendas experiente. Forneça insights diretos e acionáveis.
+## ✅ Destaques Positivos
+[Liste até 3 pontos fortes com dados específicos. Priorize melhorias percentuais significativas.]
 
-{prompt}"""
-        
-        response = gemini_client.generate_content(full_prompt)
+## ⚠️ Pontos Críticos de Atenção
+[Liste até 3 gargalos ou quedas de performance com impacto quantificado.]
+
+## 🎯 Recomendações Estratégicas Priorizadas
+[Liste 3 ações específicas e implementáveis, ordenadas por impacto esperado. Cada recomendação deve indicar qual métrica ela visa melhorar.]
+
+**DIRETRIZES DE ESTILO:**
+✓ Use linguagem clara e objetiva voltada para tomada de decisão
+✓ Inclua números e percentuais específicos em cada ponto
+✓ Priorize insights acionáveis sobre descrições genéricas
+✓ Use emojis estrategicamente para facilitar escaneabilidade
+✓ Evite jargões excessivos; seja direto ao ponto
+✓ Destaque variações percentuais maiores que ±10% como significativas"""
+
+        # Combinar system prompt com user prompt para Gemini      
+        response = gemini_client.generate_content(prompt)
         
         return response.text
         

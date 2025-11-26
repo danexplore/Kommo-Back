@@ -56,32 +56,58 @@ def gerar_insights_ia(
     
     try:
         prompt = f"""
-        Você é um analista de vendas especializado em concessionárias de veículos.
-        Analise os seguintes dados de performance e forneça insights estratégicos em português brasileiro.
-        
-        **Período:** {periodo_descricao}
-        
-        **Métricas Atuais:**
-        - Total de Leads: {metricas_atual.get('total_leads', 0)}
-        - Demos Agendadas: {metricas_atual.get('demos_agendadas', 0)}
-        - Demos Realizadas: {metricas_atual.get('demos_realizadas', 0)}
-        - No-shows: {metricas_atual.get('noshows', 0)}
-        - Vendas: {metricas_atual.get('vendas', 0)}
-        
-        **Métricas do Período Anterior (para comparação):**
-        - Total de Leads: {metricas_anterior.get('total_leads', 0)}
-        - Demos Agendadas: {metricas_anterior.get('demos_agendadas', 0)}
-        - Demos Realizadas: {metricas_anterior.get('demos_realizadas', 0)}
-        - No-shows: {metricas_anterior.get('noshows', 0)}
-        - Vendas: {metricas_anterior.get('vendas', 0)}
-        
-        Por favor, forneça:
-        1. **Resumo Geral** (2-3 frases sobre a performance)
-        2. **Pontos Positivos** (máximo 3 itens)
-        3. **Pontos de Atenção** (máximo 3 itens)
-        4. **Recomendações Estratégicas** (máximo 3 ações concretas)
-        
-        Use emojis para tornar a leitura mais agradável. Seja objetivo e direto.
+        Você é um analista sênior de SaaS B2B especializado em análise de funil de vendas e otimização de processos comerciais para software empresarial.
+
+        **CONTEXTO DO NEGÓCIO:**
+        SaaS B2B que oferece sistema de gestão para lojas de revenda de veículos novos e seminovos. Processo de vendas: geração de leads → agendamento de demonstração do sistema → realização da demo → fechamento da venda (assinatura do software).
+
+        **PERÍODO DE ANÁLISE:** {periodo_descricao}
+
+        **DADOS DO PERÍODO ATUAL:**
+        - Total de Leads: {metricas_atual.get('total_leads', 0):,}
+        - Demos Agendadas: {metricas_atual.get('demos_agendadas', 0):,}
+        - Demos Realizadas: {metricas_atual.get('demos_realizadas', 0):,}
+        - No-shows: {metricas_atual.get('noshows', 0):,}
+        - Vendas Fechadas: {metricas_atual.get('vendas', 0):,}
+
+        **DADOS DO PERÍODO ANTERIOR (baseline):**
+        - Total de Leads: {metricas_anterior.get('total_leads', 0):,}
+        - Demos Agendadas: {metricas_anterior.get('demos_agendadas', 0):,}
+        - Demos Realizadas: {metricas_anterior.get('demos_realizadas', 0):,}
+        - No-shows: {metricas_anterior.get('noshows', 0):,}
+        - Vendas Fechadas: {metricas_anterior.get('vendas', 0):,}
+
+        **INSTRUÇÕES DE ANÁLISE:**
+
+        Calcule automaticamente as seguintes taxas de conversão para ambos os períodos e compare:
+        - Taxa de Qualificação: (demos agendadas / total leads) × 100
+        - Taxa de Comparecimento: (demos realizadas / demos agendadas) × 100
+        - Taxa de No-show: (no-shows / demos agendadas) × 100
+        - Taxa de Fechamento: (vendas / demos realizadas) × 100
+        - Taxa de Conversão End-to-End: (vendas / total leads) × 100
+
+        **FORMATO DA RESPOSTA:**
+
+        ## 📊 Resumo Executivo
+        [2-3 frases destacando a performance geral do funil e a principal tendência observada. Inclua pelo menos uma métrica percentual comparativa.]
+
+        ## ✅ Destaques Positivos
+        [Liste até 3 pontos fortes com dados específicos. Priorize melhorias percentuais significativas e etapas do funil que estão performando bem.]
+
+        ## ⚠️ Pontos Críticos de Atenção
+        [Liste até 3 gargalos no funil ou quedas de performance com impacto quantificado. Identifique onde o funil está "vazando".]
+
+        ## 🎯 Recomendações Estratégicas Priorizadas
+        [Liste 3 ações específicas e implementáveis, ordenadas por impacto esperado. Cada recomendação deve indicar qual etapa do funil ela visa otimizar e o resultado esperado.]
+
+        **DIRETRIZES DE ESTILO:**
+        ✓ Use linguagem clara voltada para gestores de vendas SaaS
+        ✓ Inclua números e percentuais específicos em cada ponto
+        ✓ Priorize insights acionáveis sobre descrições genéricas
+        ✓ Use emojis estrategicamente para facilitar escaneabilidade
+        ✓ Seja direto ao ponto - gestores de SaaS valorizam eficiência
+        ✓ Destaque variações percentuais maiores que ±10% como significativas
+        ✓ Considere benchmarks típicos de SaaS B2B quando relevante
         """
         
         response = model.generate_content(prompt)
