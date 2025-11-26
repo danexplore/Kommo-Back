@@ -1,121 +1,58 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
-import os
-from supabase import create_client, Client
+from datetime import datetime, timedelta, timezone
 import plotly.express as px
-import google.generativeai as genai
+
+# Timezone de Brasília (GMT-03:00)
+TZ_BRASILIA = timezone(timedelta(hours=-3))
+
+# Importar módulos refatorados
+from config import (
+    DEMO_COMPLETED_STATUSES,
+    FUNNEL_CLOSED_STATUSES,
+    COMPLETED_STATUSES,
+    STATUS_POS_DEMO,
+    COLORS,
+    CHART_COLORS,
+    DIAS_PT,
+    PAGE_CONFIG,
+    META_CONVERSAO_EFETIVAS,
+    DURACAO_MINIMA_EFETIVA,
+    get_main_css,
+)
+from services import (
+    init_supabase,
+    get_supabase,
+    init_gemini,
+    get_gemini,
+    get_leads_data as service_get_leads_data,
+    get_all_leads_for_summary,
+    get_chamadas_vendedores as service_get_chamadas,
+    get_tempo_por_etapa,
+)
+from core import (
+    generate_kommo_link,
+    calcular_demos_realizadas,
+    calcular_noshows,
+    calcular_vendas,
+    calcular_metricas_chamadas,
+    classificar_ligacao,
+)
+from utils import safe_divide, format_number, format_percentage
 
 # Configuração da página
-st.set_page_config(
-    page_title="Painel de Acompanhamento de Leads - ecosys AUTO",
-    page_icon="🚗",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(**PAGE_CONFIG)
 
-# ========================================
-# CONFIGURAÇÃO DE STATUS DO KOMMO
-# ========================================
-# IMPORTANTE: Esta lista precisa ser ajustada de acordo com os status
-# reais utilizados no Kommo CRM da ecosys AUTO.
+# Inicializar serviços
+supabase = get_supabase()
+gemini_client = get_gemini()
 
-# Status que indicam que a demo foi concluída
-DEMO_COMPLETED_STATUSES = [
-    "5 - Demonstração realizada",
-    "6 - Lead quente",
-    "5 - VISITA REALIZADA",
-    "6 - EM Negociação",
-]
+# Aplicar CSS customizado
+st.markdown(get_main_css(), unsafe_allow_html=True)
 
-# Status que indicam que o lead saiu do funil (conclusão/encerramento)
-FUNNEL_CLOSED_STATUSES = [
-    "Venda Ganha",
-    "Desqualificados",
-]
-
-# Todos os status que indicam que o lead não precisa mais de ação
-COMPLETED_STATUSES = DEMO_COMPLETED_STATUSES + FUNNEL_CLOSED_STATUSES
-
-# Manter compatibilidade com código existente
-STATUS_POS_DEMO = COMPLETED_STATUSES
-
-# Configuração do Supabase
-@st.cache_resource
-def init_supabase():
-    """Inicializa conexão com Supabase"""
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    
-    if not url or not key:
-        st.error("⚠️ Credenciais do Supabase não configuradas. Configure SUPABASE_URL e SUPABASE_KEY.")
-        st.stop()
-    
-    return create_client(url, key)
-
-supabase: Client = init_supabase()
-
-# Configuração do Google Gemini
-@st.cache_resource
-def init_gemini():
-    """Inicializa cliente Google Gemini"""
-    api_key = st.secrets.get("GEMINI_API_KEY", None)
-    
-    if not api_key:
-        return None
-    
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-2.5-flash')
-
-gemini_client = init_gemini()
-
-# CSS customizado - ecosys AUTO Branding
+# CSS adicional específico do app (extensões do tema base)
 st.markdown("""
     <style>
-    /* Background geral - tons escuros com cinza */
-    .stApp {
-        background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);
-    }
-    
-    /* Main */
-    .main {
-        padding: 2rem 1.5rem;
-        background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);
-    }
-    
-    /* Texto base */
-    body {
-        color: #ffffff;
-    }
-    
-    /* Títulos - Teal ecosys AUTO */
-    h1 {
-        font-weight: 800;
-        color: #20B2AA;
-        text-shadow: 0 2px 10px rgba(32, 178, 170, 0.3);
-        font-size: 2.5rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    h2 {
-        font-weight: 700;
-        color: #20B2AA;
-        font-size: 1.8rem;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-    }
-    
-    h3 {
-        font-weight: 600;
-        color: #20B2AA;
-        font-size: 1.3rem;
-    }
-    
-    /* Dividers */
-    hr, .stDivider {
-        border-color: rgba(32, 178, 170, 0.2);
-    }
-    
     /* Métricas - Teal e Silver */
     div[data-testid="stMetric"] {
         background: linear-gradient(135deg, rgba(45, 55, 72, 0.8) 0%, rgba(26, 31, 46, 0.8) 100%);
@@ -183,253 +120,12 @@ st.markdown("""
     .stDataFrame tbody tr:nth-child(even) {
         background-color: rgba(32, 178, 170, 0.03) !important;
     }
-    
-    /* Alertas */
-    .stAlert {
-        background: linear-gradient(135deg, rgba(45, 55, 72, 0.9) 0%, rgba(26, 31, 46, 0.9) 100%);
-        border-radius: 12px;
-        border: 1px solid rgba(32, 178, 170, 0.3);
-        color: #ffffff;
-    }
-    
-    .stAlert-info {
-        border-left: 4px solid #20B2AA;
-    }
-    
-    .stAlert-warning {
-        border-left: 4px solid #ff8c00;
-    }
-    
-    .stAlert-error {
-        border-left: 4px solid #ff4444;
-    }
-    
-    .stAlert-success {
-        border-left: 4px solid #48bb78;
-    }
-    
-    /* Abas */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 12px;
-        border-bottom: 2px solid rgba(32, 178, 170, 0.15);
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        height: 55px;
-        padding: 0 28px;
-        background-color: rgba(45, 55, 72, 0.6);
-        border-radius: 12px 12px 0 0;
-        font-weight: 600;
-        color: #CBD5E0;
-        border: 1px solid rgba(32, 178, 170, 0.15);
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, rgba(32, 178, 170, 0.2) 0%, rgba(0, 139, 139, 0.1) 100%);
-        color: #20B2AA;
-        border: 2px solid #20B2AA;
-        border-bottom: none;
-        box-shadow: 0 -4px 12px rgba(32, 178, 170, 0.2);
-    }
-    
-    .stTabs [aria-selected="false"]:hover {
-        background-color: rgba(32, 178, 170, 0.12);
-        color: #ffffff;
-    }
-    
-    /* Sidebar - ecosys AUTO */
-    section[data-testid="stSidebar"] {
-        background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);
-    }
-    
-    section[data-testid="stSidebar"] * {
-        color: #ffffff;
-    }
-    
-    section[data-testid="stSidebar"] h1,
-    section[data-testid="stSidebar"] h2,
-    section[data-testid="stSidebar"] h3 {
-        color: #20B2AA;
-    }
-    
-    section[data-testid="stSidebar"] label {
-        color: #CBD5E0;
-        font-weight: 500;
-    }
-    
-    section[data-testid="stSidebar"] .stSelectbox > div > div,
-    section[data-testid="stSidebar"] .stMultiSelect > div > div {
-        background-color: rgba(32, 178, 170, 0.08);
-        border-color: rgba(32, 178, 170, 0.25);
-        border-radius: 8px;
-    }
-    
-    section[data-testid="stSidebar"] input,
-    section[data-testid="stSidebar"] select {
-        background-color: rgba(32, 178, 170, 0.08) !important;
-        color: #ffffff !important;
-        border-color: rgba(32, 178, 170, 0.25) !important;
-        border-radius: 8px !important;
-    }
-    
-    section[data-testid="stSidebar"] button {
-        background: linear-gradient(135deg, #20B2AA 0%, #008B8B 100%);
-        color: #ffffff;
-        border: none;
-        font-weight: 600;
-        border-radius: 8px;
-    }
-    
-    section[data-testid="stSidebar"] button:hover {
-        background: linear-gradient(135deg, #48D1CC 0%, #20B2AA 100%);
-        box-shadow: 0 4px 12px rgba(32, 178, 170, 0.3);
-    }
-    
-    section[data-testid="stSidebar"] .stInfo, 
-    section[data-testid="stSidebar"] .stWarning,
-    section[data-testid="stSidebar"] .stError {
-        background-color: rgba(32, 178, 170, 0.1);
-        border-color: rgba(32, 178, 170, 0.3);
-    }
-    
-    /* Links */
-    a {
-        color: #20B2AA;
-        text-decoration: none;
-        font-weight: 600;
-    }
-    
-    a:hover {
-        color: #48D1CC;
-        text-decoration: underline;
-    }
-    
-    /* Input fields */
-    .stTextInput > div > div > input,
-    .stNumberInput > div > div > input,
-    .stDateInput > div > div > input {
-        background-color: rgba(32, 178, 170, 0.08) !important;
-        color: #ffffff !important;
-        border-color: rgba(32, 178, 170, 0.25) !important;
-        border-radius: 8px !important;
-    }
-    
-    .stTextInput > div > div > input::placeholder,
-    .stNumberInput > div > div > input::placeholder {
-        color: rgba(203, 213, 224, 0.6) !important;
-    }
-    
-    /* Checkbox */
-    .stCheckbox > label {
-        color: #CBD5E0;
-    }
-    
-    /* Caption */
-    .caption {
-        color: #CBD5E0;
-    }
-    
-    /* Gradiente de destaque para cards */
-    .metric-card {
-        background: linear-gradient(135deg, rgba(32, 178, 170, 0.15) 0%, rgba(0, 139, 139, 0.08) 100%);
-        border-left: 4px solid #20B2AA;
-        border-radius: 12px;
-        padding: 1.5rem;
-    }
     </style>
     """, unsafe_allow_html=True)
 
-# Funções de consulta ao banco
-@st.cache_data(ttl=1800)  # Cache de 30 minutos
-def get_leads_data(data_inicio: datetime, data_fim: datetime, vendedores: list = None):
-    """Busca dados de leads da view kommo_leads_statistics"""
-    try:
-        query = supabase.table('kommo_leads_statistics').select('*')
-        
-        # Filtro de data - buscar leads que tenham qualquer evento (criação, demo, noshow, agendamento, venda) no período
-        # Usar múltiplas queries e combinar resultados
-        data_inicio_iso = data_inicio.isoformat()
-        data_fim_iso = data_fim.isoformat()
-        
-        # Buscar leads por cada coluna de data
-        all_data = []
-        
-        try:
-            # Query 1: criado_em
-            q1 = supabase.table('kommo_leads_statistics').select('*').gte('criado_em', data_inicio_iso).lte('criado_em', data_fim_iso).execute()
-            if q1.data:
-                all_data.extend(q1.data)
-        except:
-            pass
-        
-        try:
-            # Query 2: data_demo
-            q2 = supabase.table('kommo_leads_statistics').select('*').gte('data_demo', data_inicio_iso).lte('data_demo', data_fim_iso).execute()
-            if q2.data:
-                all_data.extend(q2.data)
-        except:
-            pass
-        
-        try:
-            # Query 3: data_noshow
-            q3 = supabase.table('kommo_leads_statistics').select('*').gte('data_noshow', data_inicio_iso).lte('data_noshow', data_fim_iso).execute()
-            if q3.data:
-                all_data.extend(q3.data)
-        except:
-            pass
-        
-        try:
-            # Query 4: data_agendamento
-            q4 = supabase.table('kommo_leads_statistics').select('*').gte('data_agendamento', data_inicio_iso).lte('data_agendamento', data_fim_iso).execute()
-            if q4.data:
-                all_data.extend(q4.data)
-        except:
-            pass
-        
-        try:
-            # Query 5: data_venda
-            q5 = supabase.table('kommo_leads_statistics').select('*').gte('data_venda', data_inicio_iso).lte('data_venda', data_fim_iso).execute()
-            if q5.data:
-                all_data.extend(q5.data)
-        except:
-            pass
-        
-        # Remover duplicatas usando ID
-        if all_data:
-            seen_ids = set()
-            unique_data = []
-            for item in all_data:
-                if item.get('id') not in seen_ids:
-                    seen_ids.add(item.get('id'))
-                    unique_data.append(item)
-            all_data = unique_data
-        
-        # Se há filtro de vendedor, aplicar aqui
-        if vendedores and len(vendedores) > 0:
-            all_data = [item for item in all_data if item.get('vendedor') in vendedores]
-        
-        if all_data:
-            df = pd.DataFrame(all_data)
-            
-            # Converter colunas de data
-            date_columns = ['criado_em', 'data_agendamento', 'data_demo', 'data_noshow', 'data_venda']
-            for col in date_columns:
-                if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], errors='coerce')
-            
-            return df
-        else:
-            return pd.DataFrame()
-            
-    except Exception as e:
-        st.error(f"❌ Erro ao buscar dados: {str(e)}")
-        return pd.DataFrame()
-
-def generate_kommo_link(lead_id):
-    """Gera link clicável para o Kommo"""
-    if pd.isna(lead_id):
-        return ""
-    return f"https://atendimentoecosysauto.kommo.com/leads/detail/{int(lead_id)}"
+# get_leads_data e get_chamadas_vendedores importados de services
+# Alias para manter compatibilidade com código existente
+get_leads_data = service_get_leads_data
 
 def format_dataframe_with_links(df, id_column='id', name_column='lead_name'):
     """Formata DataFrame com links clicáveis"""
@@ -584,7 +280,7 @@ periodo_rapido = st.sidebar.selectbox(
 )
 
 # Calcular datas baseado no período selecionado
-hoje = datetime.now().date()
+hoje = datetime.now(TZ_BRASILIA).date()
 
 if periodo_rapido == "Últimos 7 dias":
     data_inicio = hoje - timedelta(days=7)
@@ -605,7 +301,7 @@ else:  # Personalizado
         data_inicio = st.date_input(
             "De",
             value=hoje - timedelta(days=30),
-            max_value=datetime.now(),
+            max_value=datetime.now(TZ_BRASILIA),
             format="DD/MM/YYYY",
             key="data_inicio_custom"
         )
@@ -614,7 +310,7 @@ else:  # Personalizado
         data_fim = st.date_input(
             "Até",
             value=hoje,
-            max_value=datetime.now(),
+            max_value=datetime.now(TZ_BRASILIA),
             format="DD/MM/YYYY",
             key="data_fim_custom"
         )
@@ -679,7 +375,7 @@ if st.sidebar.button("🔄 Atualizar Dados", use_container_width=True, key="refr
     st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.caption(f"📅 Última atualização: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+st.sidebar.caption(f"📅 Última atualização: {datetime.now(TZ_BRASILIA).strftime('%d/%m/%Y %H:%M')}")
 
 # Aplicar filtros aos dados carregados
 df_leads = df_leads_all.copy()
@@ -701,7 +397,7 @@ if pipelines_selecionados:
         st.stop()
 
 # Aplicar lógica de negócio
-hoje = pd.Timestamp(datetime.now().date())
+hoje = pd.Timestamp(datetime.now(TZ_BRASILIA).date())
 
 # ========================================
 # BUSCAR DADOS DO MÊS ANTERIOR PARA COMPARAÇÃO
@@ -776,41 +472,19 @@ with col2:
         st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta="Sem comparação")
 
 with col25:
-    # Período atual - Reuniões Realizadas com lógica correta
-    demos_realizadas = len(df_leads[
-        (df_leads['data_demo'].notna()) &
-        (df_leads['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
-        (df_leads['data_demo'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time()))) &
-        (
-            (
-                (df_leads['status'] == 'Desqualificados') &
-                (df_leads['data_demo'].notna()) &
-                (df_leads['data_noshow'].isna())
-            ) |
-            (
-                (df_leads['data_demo'].notna()) &
-                (df_leads['status'].isin(['5 - Demonstração realizada', '6 - Lead quente', 'Venda ganha']))
-            )
-        )
-    ])
+    # Período atual - Reuniões Realizadas (usando função centralizada)
+    demos_realizadas = calcular_demos_realizadas(
+        df_leads,
+        datetime.combine(data_inicio, datetime.min.time()),
+        datetime.combine(data_fim, datetime.max.time())
+    )
     
     # Período anterior - Demos Realizadas
-    demos_realizadas_anterior = len(df_leads_anterior[
-        (df_leads_anterior['data_demo'].notna()) &
-        (df_leads_anterior['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio_anterior, datetime.min.time()))) &
-        (df_leads_anterior['data_demo'] <= pd.Timestamp(datetime.combine(data_fim_anterior, datetime.max.time()))) &
-        (
-            (
-                (df_leads_anterior['status'] == 'Desqualificados') &
-                (df_leads_anterior['data_demo'].notna()) &
-                (df_leads_anterior['data_noshow'].isna())
-            ) |
-            (
-                (df_leads_anterior['data_demo'].notna()) &
-                (df_leads_anterior['status'].isin(['5 - Demonstração realizada', '6 - Lead quente', 'Venda ganha']))
-            )
-        )
-    ]) if not df_leads_anterior.empty else 0
+    demos_realizadas_anterior = calcular_demos_realizadas(
+        df_leads_anterior,
+        datetime.combine(data_inicio_anterior, datetime.min.time()),
+        datetime.combine(data_fim_anterior, datetime.max.time())
+    ) if not df_leads_anterior.empty else 0
     
     # Calcular diferença demos realizadas
     if demos_realizadas_anterior > 0:
@@ -821,19 +495,19 @@ with col25:
     else:
         st.metric("🎯 Demos Realizadas", f"{demos_realizadas:,}".replace(",", "."), delta="Sem comparação")
     
-    # Calcular taxa de noshow período atual
-    noshow_count = len(df_leads[
-        (df_leads['data_noshow'].notna()) &
-        (df_leads['data_noshow'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
-        (df_leads['data_noshow'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time())))
-    ])
+    # Calcular taxa de noshow período atual (usando função centralizada)
+    noshow_count = calcular_noshows(
+        df_leads,
+        datetime.combine(data_inicio, datetime.min.time()),
+        datetime.combine(data_fim, datetime.max.time())
+    )
     
     # Calcular taxa de noshow período anterior
-    noshow_count_anterior = len(df_leads_anterior[
-        (df_leads_anterior['data_noshow'].notna()) &
-        (df_leads_anterior['data_noshow'] >= pd.Timestamp(datetime.combine(data_inicio_anterior, datetime.min.time()))) &
-        (df_leads_anterior['data_noshow'] <= pd.Timestamp(datetime.combine(data_fim_anterior, datetime.max.time())))
-    ]) if not df_leads_anterior.empty else 0
+    noshow_count_anterior = calcular_noshows(
+        df_leads_anterior,
+        datetime.combine(data_inicio_anterior, datetime.min.time()),
+        datetime.combine(data_fim_anterior, datetime.max.time())
+    ) if not df_leads_anterior.empty else 0
     
     # Calcular diferença no-show
     if noshow_count_anterior > 0 or noshow_count > 0:
@@ -1002,7 +676,7 @@ with tab2:
             
             # Informações adicionais
             st.markdown("")
-            st.caption(f"🕐 Análise gerada em: {datetime.now().strftime('%d/%m/%Y às %H:%M')} | 🤖 Powered by OpenAI GPT-4o-mini")
+            st.caption(f"🕐 Análise gerada em: {datetime.now(TZ_BRASILIA).strftime('%d/%m/%Y às %H:%M')} | 🤖 Powered by OpenAI GPT-4o-mini")
             
             # ========================================
             # SEÇÃO DE CHAT CONVERSACIONAL
@@ -1083,89 +757,9 @@ with tab2:
 # PREPARAR DADOS PARA RESUMO DIÁRIO
 # ========================================
 
-# Buscar todos os leads independente de data de criação para o resumo diário
-@st.cache_data(ttl=1800)
-def get_all_leads_for_summary(data_inicio: datetime, data_fim: datetime, vendedores: list = None):
-    """Busca todos os leads para o resumo diário (sem filtro de criado_em)"""
-    try:
-        query = supabase.table('kommo_leads_statistics').select('*')
-        
-        if vendedores and len(vendedores) > 0:
-            query = query.in_('vendedor', vendedores)
-        
-        response = query.execute()
-        
-        if response.data:
-            df = pd.DataFrame(response.data)
-            
-            # Converter colunas de data
-            date_columns = ['criado_em', 'data_agendamento', 'data_demo', 'data_noshow', 'data_venda']
-            for col in date_columns:
-                if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], errors='coerce')
-            
-            return df
-        else:
-            return pd.DataFrame()
-            
-    except Exception as e:
-        return pd.DataFrame()
-
-# Função para buscar tempo médio por etapa
-@st.cache_data(ttl=1800)
-def get_tempo_por_etapa():
-    """Busca o tempo médio que leads ficam em cada etapa"""
-    try:
-        # Executar query SQL para obter tempo médio por status
-        response = supabase.rpc('get_tempo_por_etapa').execute()
-        
-        if response.data:
-            df = pd.DataFrame(response.data)
-            return df
-        else:
-            return pd.DataFrame()
-            
-    except Exception as e:
-        # Se a função RPC não existir, retornar DataFrame vazio
-        return pd.DataFrame()
-
-# Função para buscar dados de chamadas dos vendedores
-@st.cache_data(ttl=1800)
-def get_chamadas_vendedores(data_inicio, data_fim):
-    """Busca dados de chamadas dos vendedores no período com paginação"""
-    try:
-        all_data = []
-        page_size = 1000
-        offset = 0
-        
-        while True:
-            # Query com paginação usando range
-            response = supabase.rpc('get_chamadas_vendedores', {
-                'data_inicio': data_inicio.isoformat(),
-                'data_fim': data_fim.isoformat()
-            }).range(offset, offset + page_size - 1).execute()
-            
-            if response.data:
-                all_data.extend(response.data)
-                # Se retornou menos que page_size, chegamos ao fim
-                if len(response.data) < page_size:
-                    break
-                offset += page_size
-            else:
-                break
-        
-        if all_data:
-            df = pd.DataFrame(all_data)
-            # Converter duration de segundos para minutos
-            if 'duration' in df.columns:
-                df['duration_minutos'] = df['duration'].apply(lambda x: round(x / 60, 2) if x > 0 else 0)
-            return df
-        else:
-            return pd.DataFrame()
-            
-    except Exception as e:
-        # Se a função RPC não existir, retornar DataFrame vazio
-        return pd.DataFrame()
+# get_all_leads_for_summary e get_tempo_por_etapa importados de services
+# get_chamadas_vendedores importado de services (alias)
+get_chamadas_vendedores = service_get_chamadas
 
 df_all_leads = get_all_leads_for_summary(
     datetime.combine(data_inicio, datetime.min.time()),
@@ -1216,11 +810,7 @@ for data in date_range:
         df_all_leads['data_noshow'].dt.date == data_date
     ]) if 'data_noshow' in df_all_leads.columns else 0
     
-    # Reuniões Realizadas - lógica do BI
-    # Filtra leads com data_demo no dia E:
-    # 1) Status = "Desqualificados" AND data_demo preenchida AND data_noshow vazia
-    # OU
-    # 2) data_demo preenchida AND status IN ("5 - Demonstração realizada", "6 - Lead quente", "Venda ganha")
+    # Reuniões Realizadas - lógica do BI (usando constante DEMO_COMPLETED_STATUSES)
     if 'data_demo' in df_all_leads.columns and 'status' in df_all_leads.columns:
         demos_realizadas = len(df_all_leads[
             (df_all_leads['data_demo'].dt.date == data_date) &
@@ -1232,7 +822,7 @@ for data in date_range:
                 ) |
                 (
                     (df_all_leads['data_demo'].notna()) &
-                    (df_all_leads['status'].isin(['5 - Demonstração realizada', '6 - Lead quente', 'Venda ganha']))
+                    (df_all_leads['status'].isin(DEMO_COMPLETED_STATUSES))
                 )
             )
         ])
@@ -1247,7 +837,7 @@ for data in date_range:
         
     resumo_daily.append({
         'Data': data_date,
-        'Dia': data.strftime('%A').lower(),
+        'Dia': data_date.strftime('%A').lower(),
         'Novos Leads': novos_leads,
         'Agendamentos': agendamentos,
         'Demos no Dia': demos_dia,
@@ -1258,18 +848,6 @@ for data in date_range:
     })
 
 df_resumo = pd.DataFrame(resumo_daily)
-
-# Traduzir dias da semana
-dias_pt = {
-    'monday': 'segunda-feira',
-    'tuesday': 'terça-feira',
-    'wednesday': 'quarta-feira',
-    'thursday': 'quinta-feira',
-    'friday': 'sexta-feira',
-    'saturday': 'sábado',
-    'sunday': 'domingo'
-}
-df_resumo['Dia'] = df_resumo['Dia'].map(dias_pt)
 
 # Ordenar por data decrescente
 df_resumo = df_resumo.sort_values('Data', ascending=False)
@@ -1414,7 +992,7 @@ with tab3:
 with tab4:
     st.markdown("### 📅 Resumo Diário da Equipe")
     st.caption("Análise das atividades diárias no período selecionado")
-    
+        
     # Seletor de visualização
     view_type = st.radio(
         "Visualização",
@@ -1469,7 +1047,7 @@ with tab4:
                     # Noshow
                     noshow = len(df_vendedor[df_vendedor['data_noshow'].dt.date == data_date]) if 'data_noshow' in df_vendedor.columns else 0
                     
-                    # Reuniões Realizadas
+                    # Reuniões Realizadas (usando constante DEMO_COMPLETED_STATUSES)
                     if 'data_demo' in df_vendedor.columns and 'status' in df_vendedor.columns:
                         demos_realizadas = len(df_vendedor[
                             (df_vendedor['data_demo'].dt.date == data_date) &
@@ -1481,7 +1059,7 @@ with tab4:
                                 ) |
                                 (
                                     (df_vendedor['data_demo'].notna()) &
-                                    (df_vendedor['status'].isin(['5 - Demonstração realizada', '6 - Lead quente', 'Venda ganha']))
+                                    (df_vendedor['status'].isin(DEMO_COMPLETED_STATUSES))
                                 )
                             )
                         ])
@@ -1493,7 +1071,7 @@ with tab4:
                         resumo_vendedor_list.append({
                             'Vendedor': vendedor,
                             'Data': data_date,
-                            'Dia': dias_pt.get(data.strftime('%A').lower(), data.strftime('%A')),
+                            'Dia': DIAS_PT.get(data.strftime('%A').lower(), data.strftime('%A')),
                             'Novos Leads': novos_leads,
                             'Agendamentos': agendamentos,
                             'Demos no Dia': demos_dia,
@@ -1800,23 +1378,7 @@ with tab7:
             # Garantir que todas as datas do período apareçam (mesmo sem discagens)
             df_discagens_dia['data'] = pd.to_datetime(df_discagens_dia['data'])
             
-            # Paleta de cores vibrantes e distintas
-            cores_vendedores = [
-                '#4A9FFF',  # Azul
-                '#FF6B6B',  # Vermelho coral
-                '#4ECDC4',  # Teal
-                '#FFE66D',  # Amarelo
-                '#95E1D3',  # Verde menta
-                '#F38181',  # Rosa salmão
-                '#AA96DA',  # Roxo lavanda
-                '#FF9F43',  # Laranja
-                '#26DE81',  # Verde limão
-                '#FD79A8',  # Rosa pink
-                '#A29BFE',  # Lilás
-                '#00CEC9',  # Ciano
-            ]
-            
-            # Criar gráfico de linhas
+            # Criar gráfico de linhas (usando paleta do módulo config)
             fig_discagens_dia = px.line(
                 df_discagens_dia,
                 x='data',
@@ -1824,7 +1386,7 @@ with tab7:
                 color='vendedor_label',
                 labels={'data': '', 'discagens': '', 'vendedor_label': ''},
                 markers=True,
-                color_discrete_sequence=cores_vendedores,
+                color_discrete_sequence=CHART_COLORS,
                 category_orders={'vendedor_label': ordem_vendedores}
             )
             
@@ -2669,7 +2231,7 @@ with tab9:
     st.markdown("### ✅ Demonstrações Realizadas")
     st.caption("Análise completa das demonstrações realizadas no período")
     
-    # Filtrar demos realizadas usando a MESMA lógica da Visão Geral
+    # Filtrar demos realizadas usando constante DEMO_COMPLETED_STATUSES
     demos_realizadas_df = df_leads[
         (df_leads['data_demo'].notna()) &
         (df_leads['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
@@ -2682,7 +2244,7 @@ with tab9:
             ) |
             (
                 (df_leads['data_demo'].notna()) &
-                (df_leads['status'].isin(['5 - Demonstração realizada', '6 - Lead quente', 'Venda ganha']))
+                (df_leads['status'].isin(DEMO_COMPLETED_STATUSES))
             )
         )
     ].copy()

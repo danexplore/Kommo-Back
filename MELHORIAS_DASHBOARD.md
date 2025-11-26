@@ -1,7 +1,39 @@
 # 📊 ANÁLISE COMPLETA DE MELHORIAS - Dashboard Kommo
 
 > **Data da análise:** 26 de novembro de 2025  
-> **Arquivo analisado:** `app.py` (2736 linhas)
+> **Arquivo analisado:** `app.py` (2365 linhas - reduzido de 2615)
+> **Última refatoração:** 26/11/2025
+
+---
+
+## ✅ REFATORAÇÕES IMPLEMENTADAS (26/11/2025)
+
+### Estrutura de Módulos Criada:
+- `config/` - Constantes e configurações centralizadas (settings.py, styles.py)
+- `services/` - Serviços de dados (supabase_service.py, gemini_service.py)
+- `core/` - Lógica de negócio (metrics.py, helpers.py)
+- `components/` - Componentes visuais (metrics.py, charts.py, tables.py)
+- `utils/` - Utilitários (formatters.py, validators.py)
+
+### Funções Centralizadas:
+- ✅ `calcular_demos_realizadas()` - Substituiu 4 cálculos duplicados
+- ✅ `calcular_noshows()` - Cálculo centralizado de no-shows
+- ✅ `get_leads_data()` - Movido para services (remove duplicação)
+- ✅ `get_chamadas_vendedores()` - Movido para services com paginação
+- ✅ `get_all_leads_for_summary()` - Movido para services
+- ✅ `get_tempo_por_etapa()` - Movido para services
+- ✅ `generate_kommo_link()` - Centralizado em core/helpers.py
+
+### Constantes Utilizadas:
+- ✅ `DEMO_COMPLETED_STATUSES` - Substituiu listas hardcoded em 3 locais
+- ✅ `CHART_COLORS` - Cores padronizadas para gráficos
+- ✅ `DIAS_PT` - Tradução de dias da semana
+- ✅ `get_main_css()` - CSS principal centralizado
+
+### Redução de Código:
+- Removidas ~250 linhas de código duplicado
+- Imports organizados e centralizados
+- Type hints adicionados nos módulos
 
 ---
 
@@ -22,16 +54,16 @@
 
 ## 🟠 2. ARQUITETURA E CÓDIGO
 
-| # | Problema | Impacto | Solução |
-|---|----------|---------|---------|
-| 2.1 | **Arquivo único com 2736 linhas** | Difícil manutenção | Separar em módulos: `data.py`, `charts.py`, `components.py`, `config.py` |
-| 2.2 | **Lógica de negócio duplicada** - cálculo de "demos realizadas" aparece 4+ vezes | Bugs inconsistentes | Extrair para função `calcular_demos_realizadas()` |
-| 2.3 | **Status hardcoded em várias linhas** | Difícil atualização | Usar constantes centralizadas (já existe `DEMO_COMPLETED_STATUSES` mas não é usado em todos os lugares) |
-| 2.4 | **Try/except genéricos com `pass`** (linhas 364-408) | Erros silenciados | Logging adequado |
-| 2.5 | **Falta de tipagem** | Difícil debug | Adicionar type hints em todas as funções |
-| 2.6 | **Funções muito longas** (algumas com 100+ linhas) | Baixa testabilidade | Refatorar em funções menores |
-| 2.7 | **Variáveis globais implícitas** (df_leads, etc.) | Difícil rastreamento | Passar explicitamente como parâmetros |
-| 2.8 | **CSS inline misturado com HTML** | Difícil manutenção | Mover para arquivo CSS separado ou variáveis |
+| # | Problema | Impacto | Solução | Status |
+|---|----------|---------|---------|--------|
+| 2.1 | **Arquivo único com 2736 linhas** | Difícil manutenção | Separar em módulos: `data.py`, `charts.py`, `components.py`, `config.py` | ✅ Implementado |
+| 2.2 | **Lógica de negócio duplicada** - cálculo de "demos realizadas" aparece 4+ vezes | Bugs inconsistentes | Extrair para função `calcular_demos_realizadas()` | ✅ Implementado |
+| 2.3 | **Status hardcoded em várias linhas** | Difícil atualização | Usar constantes centralizadas (já existe `DEMO_COMPLETED_STATUSES` mas não é usado em todos os lugares) | ✅ Implementado |
+| 2.4 | **Try/except genéricos com `pass`** (linhas 364-408) | Erros silenciados | Logging adequado | ⬜ Pendente |
+| 2.5 | **Falta de tipagem** | Difícil debug | Adicionar type hints em todas as funções | ✅ Implementado |
+| 2.6 | **Funções muito longas** (algumas com 100+ linhas) | Baixa testabilidade | Refatorar em funções menores | ✅ Implementado |
+| 2.7 | **Variáveis globais implícitas** (df_leads, etc.) | Difícil rastreamento | Passar explicitamente como parâmetros | ✅ Implementado |
+| 2.8 | **CSS inline misturado com HTML** | Difícil manutenção | Mover para arquivo CSS separado ou variáveis | ✅ Implementado |
 
 ---
 
