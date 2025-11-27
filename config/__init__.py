@@ -12,6 +12,8 @@ from config.settings import (
     CACHE_TTL_TEMPO,
     PAGE_CONFIG,
     DIAS_PT,
+    DIAS_PT_LISTA,
+    DIAS_EN_ORDEM,
     COLORS,
     CHART_COLORS,
     META_CONVERSAO_EFETIVAS,
@@ -40,6 +42,8 @@ __all__ = [
     # UI
     'PAGE_CONFIG',
     'DIAS_PT',
+    'DIAS_PT_LISTA',
+    'DIAS_EN_ORDEM',
     'COLORS',
     'CHART_COLORS',
     # Metas

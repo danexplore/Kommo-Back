@@ -44,8 +44,8 @@ def format_date_br(date: Union[datetime, pd.Timestamp, str], include_time: bool 
     if isinstance(date, str):
         try:
             date = pd.to_datetime(date)
-        except:
-            return date
+        except (ValueError, TypeError):
+            return date  # Retorna string original se não conseguir parsear
     
     if include_time:
         return date.strftime('%d/%m/%Y %H:%M')

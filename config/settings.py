@@ -47,7 +47,7 @@ PAGE_CONFIG = {
     "initial_sidebar_state": "expanded"
 }
 
-# Tradução de dias da semana
+# Tradução de dias da semana (dicionário)
 DIAS_PT: Dict[str, str] = {
     'monday': 'segunda-feira',
     'tuesday': 'terça-feira',
@@ -57,6 +57,12 @@ DIAS_PT: Dict[str, str] = {
     'saturday': 'sábado',
     'sunday': 'domingo'
 }
+
+# Tradução de dias da semana (lista ordenada seg-dom)
+DIAS_PT_LISTA: List[str] = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+
+# Ordem dos dias em inglês (para mapeamento)
+DIAS_EN_ORDEM: List[str] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 # ========================================
 # PALETA DE CORES

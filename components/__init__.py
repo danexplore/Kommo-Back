@@ -23,6 +23,19 @@ from components.tables import (
     summary_table,
 )
 
+from components.marketing_dashboard import (
+    render_marketing_dashboard,
+    render_marketing_summary_cards,
+    render_insights_cards,
+    render_campaign_performance_chart,
+    render_conversion_funnel_chart,
+    render_desqualification_analysis,
+    render_period_comparison,
+    render_campaign_ranking,
+    render_metrics_table,
+    render_trend_chart,
+)
+
 __all__ = [
     # Metrics
     'metric_with_comparison',
@@ -40,4 +53,15 @@ __all__ = [
     'paginated_dataframe',
     'ranking_table',
     'summary_table',
+    # Marketing Dashboard
+    'render_marketing_dashboard',
+    'render_marketing_summary_cards',
+    'render_insights_cards',
+    'render_campaign_performance_chart',
+    'render_conversion_funnel_chart',
+    'render_desqualification_analysis',
+    'render_period_comparison',
+    'render_campaign_ranking',
+    'render_metrics_table',
+    'render_trend_chart',
 ]

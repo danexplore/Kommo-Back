@@ -127,6 +127,32 @@ st.markdown("""
 # Alias para manter compatibilidade com código existente
 get_leads_data = service_get_leads_data
 
+def render_empty_state(icon: str = "📭", title: str = "Nenhum dado encontrado", description: str = "", suggestion: str = ""):
+    """
+    Renderiza um estado vazio estilizado quando não há dados para exibir.
+    
+    Args:
+        icon: Emoji ou ícone para exibir
+        title: Título principal do estado vazio
+        description: Descrição detalhada
+        suggestion: Sugestão de ação para o usuário
+    """
+    st.markdown(f"""
+    <div style="
+        text-align: center;
+        padding: 3rem 2rem;
+        background: linear-gradient(135deg, rgba(45, 55, 72, 0.3) 0%, rgba(26, 32, 44, 0.5) 100%);
+        border-radius: 16px;
+        border: 1px dashed rgba(255,255,255,0.2);
+        margin: 1rem 0;
+    ">
+        <div style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.8;">{icon}</div>
+        <h3 style="color: #ffffff; margin-bottom: 0.5rem;">{title}</h3>
+        <p style="color: #A0AEC0; margin-bottom: 1rem;">{description}</p>
+        {f'<p style="color: #68D391; font-size: 0.9rem;"><strong>💡 Dica:</strong> {suggestion}</p>' if suggestion else ''}
+    </div>
+    """, unsafe_allow_html=True)
+
 def format_dataframe_with_links(df, id_column='id', name_column='lead_name'):
     """Formata DataFrame com links clicáveis"""
     if df.empty:
@@ -342,44 +368,44 @@ with st.spinner("⏳ Carregando dados..."):
 
 # Filtro de Vendedor - baseado nos dados carregados
 st.sidebar.markdown("---")
-st.sidebar.subheader("👤 Vendedores")
 
-if not df_leads_all.empty and 'vendedor' in df_leads_all.columns:
-    vendedores_disponiveis = sorted(df_leads_all['vendedor'].dropna().unique().tolist())
-    
-    if vendedores_disponiveis:
-        vendedores_selecionados = st.sidebar.multiselect(
-            "Selecione os vendedores",
-            options=vendedores_disponiveis,
-            default=vendedores_disponiveis,
-            key="vendedores_filter"
-        )
+with st.sidebar.expander("👤 Vendedores", expanded=True):
+    if not df_leads_all.empty and 'vendedor' in df_leads_all.columns:
+        vendedores_disponiveis = sorted(df_leads_all['vendedor'].dropna().unique().tolist())
+        
+        if vendedores_disponiveis:
+            vendedores_selecionados = st.multiselect(
+                "Selecione os vendedores",
+                options=vendedores_disponiveis,
+                default=vendedores_disponiveis,
+                key="vendedores_filter"
+            )
+        else:
+            vendedores_selecionados = []
+            st.info("Nenhum vendedor encontrado na base")
     else:
         vendedores_selecionados = []
-        st.sidebar.info("Nenhum vendedor encontrado na base")
-else:
-    vendedores_selecionados = []
-    st.sidebar.info("Nenhum vendedor encontrado na base")
+        st.info("Nenhum vendedor encontrado na base")
 
 # Filtro de Pipeline - baseado nos dados carregados
 st.sidebar.markdown("---")
-st.sidebar.subheader("🔄 Pipelines")
 
-if not df_leads_all.empty and 'pipeline' in df_leads_all.columns:
-    pipelines_disponiveis = sorted(df_leads_all['pipeline'].dropna().unique().tolist())
-    
-    if pipelines_disponiveis:
-        st.sidebar.write("Selecione os pipelines:")
-        pipelines_selecionados = []
-        for pipeline in pipelines_disponiveis:
-            if st.sidebar.checkbox(pipeline, value=True, key=f"pipeline_{pipeline}"):
-                pipelines_selecionados.append(pipeline)
+with st.sidebar.expander("🔄 Pipelines", expanded=True):
+    if not df_leads_all.empty and 'pipeline' in df_leads_all.columns:
+        pipelines_disponiveis = sorted(df_leads_all['pipeline'].dropna().unique().tolist())
+        
+        if pipelines_disponiveis:
+            st.write("Selecione os pipelines:")
+            pipelines_selecionados = []
+            for pipeline in pipelines_disponiveis:
+                if st.checkbox(pipeline, value=True, key=f"pipeline_{pipeline}"):
+                    pipelines_selecionados.append(pipeline)
+        else:
+            pipelines_selecionados = []
+            st.info("Nenhum pipeline encontrado na base")
     else:
         pipelines_selecionados = []
-        st.sidebar.info("Nenhum pipeline encontrado na base")
-else:
-    pipelines_selecionados = []
-    st.sidebar.info("Nenhum pipeline encontrado na base")
+        st.info("Nenhum pipeline encontrado na base")
 
 # Botão de atualizar
 st.sidebar.markdown("---")
@@ -457,9 +483,9 @@ with col1:
         diferenca_leads = total_leads - total_leads_anterior
         pct_diferenca = ((total_leads - total_leads_anterior) / total_leads_anterior) * 100
         delta_text = f"{diferenca_leads:+d} leads ({pct_diferenca:+.1f}%)"
-        st.metric("📥 Total de Leads", f"{total_leads:,}".replace(",", "."), delta=delta_text)
+        st.metric("📥 Total de Leads", f"{total_leads:,}".replace(",", "."), delta=delta_text, help="Total de leads novos criados no período selecionado")
     else:
-        st.metric("📥 Total de Leads", f"{total_leads:,}".replace(",", "."), delta="Sem comparação")
+        st.metric("📥 Total de Leads", f"{total_leads:,}".replace(",", "."), delta="Sem comparação", help="Total de leads novos criados no período selecionado")
     
     if total_leads > 0:
         taxa_conversao_total = (leads_convertidos / total_leads) * 100
@@ -480,9 +506,9 @@ with col2:
         diferenca_demo = leads_com_demo - leads_com_demo_anterior
         pct_diferenca_demo = ((leads_com_demo - leads_com_demo_anterior) / leads_com_demo_anterior) * 100
         delta_text_demo = f"{diferenca_demo:+d} ({pct_diferenca_demo:+.1f}%)"
-        st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta=delta_text_demo)
+        st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta=delta_text_demo, help="Leads com demonstração agendada no período")
     else:
-        st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta="Sem comparação")
+        st.metric("📅 Com Demo", f"{leads_com_demo:,}".replace(",", "."), delta="Sem comparação", help="Leads com demonstração agendada no período")
 
 with col25:
     # Período atual - Reuniões Realizadas (usando função centralizada)
@@ -504,9 +530,9 @@ with col25:
         diferenca_demos_real = demos_realizadas - demos_realizadas_anterior
         pct_diferenca_demos = ((demos_realizadas - demos_realizadas_anterior) / demos_realizadas_anterior) * 100
         delta_text_demos = f"{diferenca_demos_real:+d} ({pct_diferenca_demos:+.1f}%)"
-        st.metric("🎯 Demos Realizadas", f"{demos_realizadas:,}".replace(",", "."), delta=delta_text_demos)
+        st.metric("🎯 Demos Realizadas", f"{demos_realizadas:,}".replace(",", "."), delta=delta_text_demos, help="Demos efetivamente realizadas (não no-show) no período")
     else:
-        st.metric("🎯 Demos Realizadas", f"{demos_realizadas:,}".replace(",", "."), delta="Sem comparação")
+        st.metric("🎯 Demos Realizadas", f"{demos_realizadas:,}".replace(",", "."), delta="Sem comparação", help="Demos efetivamente realizadas (não no-show) no período")
     
     # Calcular taxa de noshow período atual (usando função centralizada)
     noshow_count = calcular_noshows(
@@ -530,9 +556,9 @@ with col25:
             delta_text_noshow = f"{diferenca_noshow:+d} ({pct_diferenca_noshow:+.1f}%)"
         else:
             delta_text_noshow = f"{diferenca_noshow:+d}"
-        st.metric("📉 No-show", f"{noshow_count:,}".replace(",", "."), delta=delta_text_noshow, delta_color="inverse")
+        st.metric("📉 No-show", f"{noshow_count:,}".replace(",", "."), delta=delta_text_noshow, delta_color="inverse", help="Demos que não foram realizadas (cliente não compareceu)")
     else:
-        st.metric("📉 No-show", f"{noshow_count:,}".replace(",", "."), delta="0")
+        st.metric("📉 No-show", f"{noshow_count:,}".replace(",", "."), delta="0", help="Demos que não foram realizadas (cliente não compareceu)")
 
 with col4:
     # Período anterior - Convertidos
@@ -545,9 +571,9 @@ with col4:
         diferenca_convertidos = leads_convertidos - leads_convertidos_anterior
         pct_diferenca_convertidos = ((leads_convertidos - leads_convertidos_anterior) / leads_convertidos_anterior) * 100
         delta_text_convertidos = f"{diferenca_convertidos:+d} ({pct_diferenca_convertidos:+.1f}%)"
-        st.metric("✅ Convertidos", f"{leads_convertidos:,}".replace(",", "."), delta=delta_text_convertidos)
+        st.metric("✅ Convertidos", f"{leads_convertidos:,}".replace(",", "."), delta=delta_text_convertidos, help="Leads convertidos em vendas no período")
     else:
-        st.metric("✅ Convertidos", f"{leads_convertidos:,}".replace(",", "."), delta="Sem comparação")
+        st.metric("✅ Convertidos", f"{leads_convertidos:,}".replace(",", "."), delta="Sem comparação", help="Leads convertidos em vendas no período")
 
 st.markdown("---")
 
@@ -997,7 +1023,12 @@ with tab3:
                 width='stretch'
             )
     else:
-        st.info("ℹ️ Não há demonstrações agendadas para hoje.")
+        render_empty_state(
+            icon="📆",
+            title="Nenhuma demo agendada para hoje",
+            description="Não há demonstrações pendentes de realização para o dia de hoje.",
+            suggestion="Verifique os filtros de vendedor ou consulte a aba 'Demos Realizadas'."
+        )
 
 # ========================================
 # ABA 4: RESUMO DIÁRIO
@@ -1196,7 +1227,12 @@ with tab5:
             height=min(600, len(df_detalhes_display) * 35 + 100)
         )
     else:
-        st.info("Nenhum lead encontrado com o termo pesquisado.")
+        render_empty_state(
+            icon="🔍",
+            title="Nenhum lead encontrado",
+            description="Não há leads correspondentes ao termo pesquisado.",
+            suggestion="Tente buscar por outro nome ou verifique a ortografia."
+        )
 
 # ========================================
 # ABA 6: TEMPO POR ETAPA
@@ -1400,6 +1436,7 @@ with tab7:
                 x='data',
                 y='discagens',
                 color='vendedor_label',
+                title='📈 Evolução de Discagens por Dia',
                 labels={'data': '', 'discagens': '', 'vendedor_label': ''},
                 markers=True,
                 color_discrete_sequence=CHART_COLORS,
@@ -2237,8 +2274,12 @@ with tab8:
             height=min(500, len(df_vendas_table) * 35 + 100)
         )
     else:
-        st.info("📊 Nenhuma venda registrada no período selecionado.")
-        st.caption("Ajuste os filtros na barra lateral para visualizar vendas de outros períodos.")
+        render_empty_state(
+            icon="💰",
+            title="Nenhuma venda no período",
+            description="Não há vendas registradas no período selecionado.",
+            suggestion="Ajuste as datas ou verifique os filtros de vendedor/pipeline."
+        )
 
 # ========================================
 # ABA 9: DEMOS REALIZADAS
