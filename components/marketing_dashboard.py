@@ -206,7 +206,7 @@ def render_campaign_performance_chart(
         margin=dict(b=120)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def render_conversion_funnel_chart(
@@ -267,7 +267,7 @@ def render_conversion_funnel_chart(
         height=400
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def render_desqualification_analysis(
@@ -321,7 +321,7 @@ def render_desqualification_analysis(
     )
     fig.update_traces(textposition='outside')
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Tabela com motivos (se disponível)
     df_motivos = analyzer.get_desqualification_analysis(dimension)
@@ -383,11 +383,20 @@ def render_period_comparison(
         for i, comp in enumerate(comps):
             with cols[i]:
                 delta = f"{comp.percentage_change:+.1f}%"
-                delta_color = "normal" if comp.percentage_change >= 0 else "inverse"
                 
-                # Para desqualificação, inverter a lógica de cor
-                if 'Desqualificação' in comp.metric_name:
+                # Definir cor baseada na métrica
+                # Para métricas onde AUMENTO é BOM: normal (verde +, vermelho -)
+                # Para métricas onde DIMINUIÇÃO é BOA: inverse (vermelho +, verde -)
+                metricas_aumento_ruim = ['Desqualificação', 'No-show', 'Noshow']
+                
+                is_metrica_ruim = any(m.lower() in comp.metric_name.lower() for m in metricas_aumento_ruim)
+                
+                if is_metrica_ruim:
+                    # Mais desqualificação/noshow = ruim, então inverter cores
                     delta_color = "inverse" if comp.percentage_change >= 0 else "normal"
+                else:
+                    # Mais leads/demos/vendas/conversão = bom, cores normais
+                    delta_color = "normal" if comp.percentage_change >= 0 else "inverse"
                 
                 st.metric(
                     label=comp.metric_name,
@@ -519,7 +528,9 @@ def render_metrics_table(
 def render_trend_chart(
     analyzer: MarketingAnalyzer,
     dimension: UTMDimension,
-    top_n: int = 5
+    top_n: int = 5,
+    data_inicio: Optional[date] = None,
+    data_fim: Optional[date] = None
 ) -> None:
     """
     Renderiza gráfico de tendência temporal.
@@ -528,47 +539,92 @@ def render_trend_chart(
         analyzer: MarketingAnalyzer
         dimension: Dimensão UTM
         top_n: Top N campanhas
+        data_inicio: Data inicial do período
+        data_fim: Data final do período
     """
-    df = analyzer.get_trend_data(dimension, top_n)
+    df = analyzer.get_trend_data(dimension, top_n, data_inicio, data_fim)
     
     if df.empty:
         st.info("📊 Sem dados de tendência disponíveis.")
         return
     
     st.markdown(f"#### 📈 Tendência de Leads por {dimension.display_name} (Top {top_n})")
+    st.caption(f"Acompanhe a evolução diária de leads por {dimension.display_name.lower()} no período")
     
+    # Converter data para datetime se necessário
+    df['data'] = pd.to_datetime(df['data'])
+    
+    # Ordenar por total de leads (decrescente) para a legenda
+    ordem_dimensao = df.groupby(dimension.value)['leads'].sum().sort_values(ascending=False).index.tolist()
+    
+    # Criar gráfico de linhas com design aprimorado
     fig = px.line(
         df,
         x='data',
         y='leads',
         color=dimension.value,
+        title=f'📈 Evolução de Leads por {dimension.display_name}',
+        labels={'data': '', 'leads': '', dimension.value: ''},
         markers=True,
-        labels={
-            'data': 'Data',
-            'leads': 'Leads',
-            dimension.value: dimension.display_name
-        }
+        color_discrete_sequence=CHART_COLORS,
+        category_orders={dimension.value: ordem_dimensao}
     )
     
     fig.update_layout(
-        height=400,
+        height=500,
         hovermode='x unified',
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
         legend=dict(
             orientation="h",
             yanchor="bottom",
             y=1.02,
             xanchor="center",
-            x=0.5
+            x=0.5,
+            font=dict(size=14, color='#ffffff'),
+            bgcolor='rgba(0,0,0,0)',
+            itemsizing='constant'
+        ),
+        xaxis=dict(
+            tickformat='%d/%m',
+            tickangle=0,
+            tickfont=dict(size=12, color='#CBD5E0'),
+            gridcolor='rgba(255,255,255,0.1)',
+            showgrid=True,
+            dtick='D1',  # Um tick por dia
+            tickmode='auto',
+            nticks=30
+        ),
+        yaxis=dict(
+            tickfont=dict(size=12, color='#CBD5E0'),
+            gridcolor='rgba(255,255,255,0.1)',
+            showgrid=True,
+            zeroline=False
+        ),
+        margin=dict(l=20, r=20, t=60, b=40),
+        hoverlabel=dict(
+            bgcolor='#2d3748',
+            font_size=14,
+            font_family="Arial"
         )
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    # Estilizar as linhas e marcadores
+    fig.update_traces(
+        line=dict(width=2.5),
+        marker=dict(size=8, line=dict(width=1, color='#1a1f2e')),
+        hovertemplate='<b>%{y}</b> leads<extra>%{fullData.name}</extra>'
+    )
+    
+    st.plotly_chart(fig, width='stretch')
 
 
 def render_marketing_dashboard(
     df_leads: pd.DataFrame,
     df_leads_anterior: Optional[pd.DataFrame] = None,
-    demo_completed_statuses: Optional[List[str]] = None
+    demo_completed_statuses: Optional[List[str]] = None,
+    data_inicio: Optional[date] = None,
+    data_fim: Optional[date] = None
 ) -> None:
     """
     Renderiza dashboard completo de marketing.
@@ -577,6 +633,8 @@ def render_marketing_dashboard(
         df_leads: DataFrame com leads do período atual
         df_leads_anterior: DataFrame com leads do período anterior
         demo_completed_statuses: Lista de status de demo completada
+        data_inicio: Data inicial do período selecionado
+        data_fim: Data final do período selecionado
     """
     st.markdown("### 📣 Análise Avançada de Marketing")
     st.caption("Insights detalhados sobre performance de campanhas, fontes e ROI")
@@ -640,7 +698,7 @@ def render_marketing_dashboard(
     with tab1:
         render_campaign_performance_chart(analyzer, selected_dim)
         st.markdown("")
-        render_trend_chart(analyzer, selected_dim)
+        render_trend_chart(analyzer, selected_dim, data_inicio=data_inicio, data_fim=data_fim)
     
     with tab2:
         col1, col2 = st.columns(2)

@@ -4,13 +4,14 @@ Serviço de conexão com Supabase
 Implementa conexão, queries e cache com:
 - Logging estruturado
 - Tratamento de erros consistente
-- Timeouts configuráveis
-- Query otimizada única (performance)
+- RPCs otimizadas para performance
+- Cache em múltiplas camadas
 """
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 from typing import Optional, List
+import hashlib
 
 from supabase import create_client, Client
 
@@ -81,13 +82,22 @@ def get_supabase() -> Client:
 
 
 # ========================================
-# QUERIES DE LEADS
+# CACHE HELPERS
+# ========================================
+
+def _generate_cache_key(*args) -> str:
+    """Gera uma chave de cache baseada nos argumentos"""
+    key_str = "_".join(str(arg) for arg in args)
+    return hashlib.md5(key_str.encode()).hexdigest()[:16]
+
+
+# ========================================
+# PROCESSAMENTO DE DADOS
 # ========================================
 
 def _convert_and_precompute_dates(df: pd.DataFrame) -> pd.DataFrame:
     """
     Converte colunas de data para datetime e pré-computa versões .date().
-    Resolve problema 1.7 (conversão de datas repetida).
     
     Args:
         df: DataFrame com dados brutos
@@ -107,14 +117,52 @@ def _convert_and_precompute_dates(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _fetch_leads_optimized(
+# ========================================
+# RPC: BUSCA DE LEADS OTIMIZADA
+# ========================================
+
+def _fetch_leads_via_rpc(
+    supabase: Client,
+    data_inicio_iso: str,
+    data_fim_iso: str,
+    rpc_name: str = 'get_leads_by_period'
+) -> pd.DataFrame:
+    """
+    Busca leads usando RPC otimizada.
+    
+    Args:
+        supabase: Cliente Supabase
+        data_inicio_iso: Data início em ISO format
+        data_fim_iso: Data fim em ISO format
+        rpc_name: Nome da RPC a usar
+    
+    Returns:
+        DataFrame com leads
+    """
+    try:
+        response = supabase.rpc(rpc_name, {
+            'p_data_inicio': data_inicio_iso,
+            'p_data_fim': data_fim_iso
+        }).execute()
+        
+        if response.data:
+            logger.info(f"RPC {rpc_name} executada com sucesso", records=len(response.data))
+            return pd.DataFrame(response.data)
+        
+        return pd.DataFrame()
+        
+    except Exception as e:
+        logger.warning(f"RPC {rpc_name} falhou, usando fallback", exception=str(e))
+        return pd.DataFrame()
+
+
+def _fetch_leads_fallback(
     supabase: Client,
     data_inicio_iso: str,
     data_fim_iso: str
 ) -> pd.DataFrame:
     """
-    Busca leads usando query otimizada única via RPC ou fallback para queries paralelas.
-    Resolve problema 1.1 (5 queries separadas) e 1.2 (remoção de duplicatas).
+    Fallback: busca leads usando queries múltiplas quando RPC não está disponível.
     
     Args:
         supabase: Cliente Supabase
@@ -124,25 +172,8 @@ def _fetch_leads_optimized(
     Returns:
         DataFrame com leads únicos
     """
-    # Tentar usar RPC otimizada primeiro (se existir no Supabase)
-    try:
-        response = supabase.rpc('get_leads_by_period', {
-            'p_data_inicio': data_inicio_iso,
-            'p_data_fim': data_fim_iso
-        }).execute()
-        
-        if response.data:
-            logger.info("Query RPC otimizada executada com sucesso", records=len(response.data))
-            return pd.DataFrame(response.data)
-    except Exception as e:
-        # RPC não existe, usar fallback
-        logger.debug("RPC get_leads_by_period não disponível, usando fallback", exception=str(e))
-    
-    # Fallback: usar filtro OR via query única (mais eficiente que 5 queries)
-    # Nota: Supabase REST não suporta OR diretamente, então usamos uma abordagem otimizada
     all_data = []
     
-    # Buscar por cada coluna mas com deduplicação eficiente via pandas
     for col in DATE_COLUMNS:
         try:
             response = supabase.table('kommo_leads_statistics').select('*').gte(col, data_inicio_iso).lte(col, data_fim_iso).execute()
@@ -156,7 +187,7 @@ def _fetch_leads_optimized(
     if not all_data:
         return pd.DataFrame()
     
-    # Usar pandas para deduplicação eficiente (resolve 1.2)
+    # Deduplicação via pandas
     df = pd.DataFrame(all_data)
     df = df.drop_duplicates(subset=['id'], keep='first')
     logger.debug("Duplicatas removidas via pandas", unique=len(df))
@@ -164,7 +195,52 @@ def _fetch_leads_optimized(
     return df
 
 
-@st.cache_data(ttl=CACHE_TTL_LEADS)
+def _fetch_leads_optimized(
+    supabase: Client,
+    data_inicio_iso: str,
+    data_fim_iso: str,
+    use_criado_em_only: bool = False
+) -> pd.DataFrame:
+    """
+    Busca leads usando a melhor estratégia disponível.
+    
+    Args:
+        supabase: Cliente Supabase
+        data_inicio_iso: Data início em ISO format
+        data_fim_iso: Data fim em ISO format
+        use_criado_em_only: Se True, usa RPC que filtra apenas por criado_em
+    
+    Returns:
+        DataFrame com leads
+    """
+    # Determinar qual RPC usar
+    rpc_name = 'get_leads_by_criado_em' if use_criado_em_only else 'get_leads_by_period'
+    
+    # Tentar RPC primeiro
+    df = _fetch_leads_via_rpc(supabase, data_inicio_iso, data_fim_iso, rpc_name)
+    
+    if not df.empty:
+        return df
+    
+    # Se use_criado_em_only e RPC falhou, fazer query direta simples
+    if use_criado_em_only:
+        try:
+            response = supabase.table('kommo_leads_statistics').select('*').gte('criado_em', data_inicio_iso).lte('criado_em', data_fim_iso).execute()
+            if response.data:
+                logger.info("Query direta por criado_em executada", records=len(response.data))
+                return pd.DataFrame(response.data)
+        except Exception as e:
+            logger.warning("Query direta por criado_em falhou", exception=e)
+    
+    # Fallback para queries múltiplas
+    return _fetch_leads_fallback(supabase, data_inicio_iso, data_fim_iso)
+
+
+# ========================================
+# FUNÇÕES PÚBLICAS DE LEADS
+# ========================================
+
+@st.cache_data(ttl=CACHE_TTL_LEADS, show_spinner=False)
 @log_execution("supabase_service")
 @handle_error(default_return=pd.DataFrame(), show_user_error=True)
 def get_leads_data(
@@ -174,11 +250,7 @@ def get_leads_data(
 ) -> pd.DataFrame:
     """
     Busca dados de leads da view kommo_leads_statistics.
-    
-    Otimizações implementadas:
-    - Query única otimizada (1.1)
-    - Deduplicação via pandas drop_duplicates (1.2)
-    - Pré-computação de colunas .date() (1.7)
+    Usa RPC otimizada get_leads_by_period.
     
     Args:
         data_inicio: Data inicial do período
@@ -193,7 +265,7 @@ def get_leads_data(
     data_inicio_iso = data_inicio.isoformat()
     data_fim_iso = data_fim.isoformat()
     
-    # Buscar dados com query otimizada
+    # Buscar dados com RPC otimizada
     df = _fetch_leads_optimized(supabase, data_inicio_iso, data_fim_iso)
     
     if df.empty:
@@ -212,7 +284,66 @@ def get_leads_data(
     return df
 
 
-@st.cache_data(ttl=CACHE_TTL_LEADS)
+@st.cache_data(ttl=CACHE_TTL_LEADS, show_spinner=False)
+@log_execution("supabase_service")
+@handle_error(default_return=pd.DataFrame(), show_user_error=True)
+def get_leads_by_criado_em(
+    data_inicio: datetime, 
+    data_fim: datetime, 
+    vendedores: Optional[List[str]] = None,
+    pipelines: Optional[List[str]] = None
+) -> pd.DataFrame:
+    """
+    Busca leads filtrados APENAS por criado_em (data de criação).
+    Ideal para gráficos de tendência e análises de volume.
+    Usa RPC otimizada get_leads_by_criado_em.
+    
+    Args:
+        data_inicio: Data inicial do período
+        data_fim: Data final do período
+        vendedores: Lista de vendedores para filtrar (opcional)
+        pipelines: Lista de pipelines para filtrar (opcional)
+    
+    Returns:
+        DataFrame com os leads criados no período
+    """
+    supabase = get_supabase()
+    
+    data_inicio_iso = data_inicio.isoformat()
+    data_fim_iso = data_fim.isoformat()
+    
+    logger.info(
+        "Buscando leads por criado_em",
+        data_inicio=data_inicio_iso,
+        data_fim=data_fim_iso
+    )
+    
+    # Buscar dados com RPC específica para criado_em
+    df = _fetch_leads_optimized(supabase, data_inicio_iso, data_fim_iso, use_criado_em_only=True)
+    
+    if df.empty:
+        logger.info(
+            "Nenhum lead criado no período",
+            data_inicio=data_inicio_iso,
+            data_fim=data_fim_iso
+        )
+        return pd.DataFrame()
+    
+    # Aplicar filtros
+    if vendedores and len(vendedores) > 0:
+        df = df[df['vendedor'].isin(vendedores)]
+    
+    if pipelines and len(pipelines) > 0:
+        df = df[df['pipeline'].isin(pipelines)]
+    
+    # Converter e pré-computar datas
+    df = _convert_and_precompute_dates(df)
+    
+    logger.info("Leads por criado_em carregados", records=len(df))
+    return df
+
+
+@st.cache_data(ttl=CACHE_TTL_LEADS, show_spinner=False)
 @log_execution("supabase_service")
 @handle_error(default_return=pd.DataFrame(), show_user_error=True)
 def get_all_leads_for_summary(
@@ -222,7 +353,6 @@ def get_all_leads_for_summary(
 ) -> pd.DataFrame:
     """
     Busca todos os leads para o resumo diário.
-    Usa mesma lógica otimizada de get_leads_data.
     
     Args:
         data_inicio: Data inicial do período
@@ -232,7 +362,6 @@ def get_all_leads_for_summary(
     Returns:
         DataFrame com os leads para resumo
     """
-    # Reutiliza a função otimizada
     return get_leads_data(data_inicio, data_fim, vendedores)
 
 

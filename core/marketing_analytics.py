@@ -104,7 +104,7 @@ class CampaignMetrics:
     
     @property
     def taxa_desqualificacao(self) -> float:
-        return (self.desqualificados / self.demos_realizadas * 100) if self.demos_realizadas > 0 else 0
+        return (self.desqualificados / self.total_leads * 100) if self.total_leads > 0 else 0
     
     @property
     def taxa_conversao(self) -> float:
@@ -275,9 +275,18 @@ class MarketingAnalyzer:
                 )
                 metrics.demos_realizadas = demos_realizadas_mask.sum()
             
-            # Desqualificados
+            # Desqualificados - APENAS os que tiveram demo realizada (não no-show) e foram desqualificados
             if 'status' in df_campaign.columns:
-                metrics.desqualificados = (df_campaign['status'] == self.DESQUALIFICADO_STATUS).sum()
+                # Desqualificados após demo = status Desqualificados + teve demo + não foi no-show
+                desqualificados_mask = (
+                    (df_campaign['status'] == self.DESQUALIFICADO_STATUS) &
+                    (df_campaign['data_demo'].notna())
+                )
+                # Excluir no-shows (se tiver data_noshow, não é desqualificação pós-demo)
+                if 'data_noshow' in df_campaign.columns:
+                    desqualificados_mask = desqualificados_mask & (df_campaign['data_noshow'].isna())
+                
+                metrics.desqualificados = desqualificados_mask.sum()
             
             # Vendas
             if 'data_venda' in df_campaign.columns:
@@ -699,10 +708,18 @@ class MarketingAnalyzer:
     def get_trend_data(
         self,
         dimension: UTMDimension = UTMDimension.CAMPAIGN,
-        top_n: int = 5
+        top_n: int = 5,
+        data_inicio: Optional[date] = None,
+        data_fim: Optional[date] = None
     ) -> pd.DataFrame:
         """
         Dados de tendência para gráfico de linha.
+        
+        Args:
+            dimension: Dimensão UTM para agrupar
+            top_n: Número de campanhas top a incluir
+            data_inicio: Data inicial do período (filtra por criado_em)
+            data_fim: Data final do período (filtra por criado_em)
         
         Returns:
             DataFrame com dados diários por campanha
@@ -710,14 +727,44 @@ class MarketingAnalyzer:
         if self.df.empty or 'criado_em' not in self.df.columns:
             return pd.DataFrame()
         
-        # Top N campanhas por volume
-        top_campaigns = self.df[dimension.value].value_counts().head(top_n).index.tolist()
+        # Criar cópia e converter criado_em para date
+        df_work = self.df.copy()
+        df_work['data'] = pd.to_datetime(df_work['criado_em']).dt.date
         
-        df_filtered = self.df[self.df[dimension.value].isin(top_campaigns)].copy()
-        df_filtered['data'] = pd.to_datetime(df_filtered['criado_em']).dt.date
+        # Filtrar pelo período se especificado
+        if data_inicio is not None:
+            df_work = df_work[df_work['data'] >= data_inicio]
+        if data_fim is not None:
+            df_work = df_work[df_work['data'] <= data_fim]
+        
+        if df_work.empty:
+            return pd.DataFrame()
+        
+        # Top N campanhas por volume (após filtro de período)
+        top_campaigns = df_work[dimension.value].value_counts().head(top_n).index.tolist()
+        
+        df_filtered = df_work[df_work[dimension.value].isin(top_campaigns)].copy()
         
         # Agrupar por data e campanha
         trend = df_filtered.groupby(['data', dimension.value]).size().reset_index(name='leads')
+        
+        # Garantir que todas as datas do período apareçam (mesmo com 0 leads)
+        if not trend.empty and data_inicio is not None and data_fim is not None:
+            # Usar o período especificado
+            date_range = pd.date_range(start=data_inicio, end=data_fim, freq='D')
+            
+            # Criar todas as combinações de data x campanha
+            all_combinations = pd.MultiIndex.from_product(
+                [date_range.date, top_campaigns],
+                names=['data', dimension.value]
+            ).to_frame(index=False)
+            
+            # Merge para preencher datas faltantes com 0
+            trend = all_combinations.merge(trend, on=['data', dimension.value], how='left')
+            trend['leads'] = trend['leads'].fillna(0).astype(int)
+            
+            # Ordenar por data
+            trend = trend.sort_values('data')
         
         return trend
 

@@ -26,6 +26,7 @@ from services import (
     init_gemini,
     get_gemini,
     get_leads_data as service_get_leads_data,
+    get_leads_by_criado_em as service_get_leads_by_criado_em,
     get_all_leads_for_summary,
     get_chamadas_vendedores as service_get_chamadas,
     get_tempo_por_etapa,
@@ -38,7 +39,13 @@ from core import (
     calcular_metricas_chamadas,
     classificar_ligacao,
 )
+from core.logging import get_logger
+from core.marketing_analytics import MarketingAnalyzer, UTMDimension
+from components.marketing_dashboard import render_marketing_dashboard
 from utils import safe_divide, format_number, format_percentage
+
+# Logger para o app principal
+logger = get_logger("app")
 
 # Configuração da página
 st.set_page_config(**PAGE_CONFIG)
@@ -301,7 +308,7 @@ st.markdown("---")
 # Sidebar - Logo e Filtros Globais
 # Adicionar logo no sidebar
 try:
-    st.sidebar.image("logo_ecosys_auto.png", use_container_width=True)
+    st.sidebar.image("logo_ecosys_auto.png", width='stretch')
     st.sidebar.markdown("---")
 except:
     pass  # Se a logo não existir, apenas pular
@@ -409,7 +416,7 @@ with st.sidebar.expander("🔄 Pipelines", expanded=True):
 
 # Botão de atualizar
 st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Atualizar Dados", use_container_width=True, key="refresh_btn"):
+if st.sidebar.button("🔄 Atualizar Dados", width='stretch', key="refresh_btn"):
     st.cache_data.clear()
     st.rerun()
 
@@ -580,7 +587,7 @@ st.markdown("---")
 # ========================================
 # ABAS PRINCIPAIS
 # ========================================
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "🚨 Leads com Atenção",
     "🤖 Insights IA",
     "📆 Demos de Hoje",
@@ -589,7 +596,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "⏱️ Tempo por Etapa",
     "📞 Produtividade do Vendedor",
     "💰 Mural de Vendas",
-    "✅ Demos Realizadas"
+    "✅ Demos Realizadas",
+    "📣 Marketing Analytics"
 ])
 
 # ========================================
@@ -655,11 +663,11 @@ with tab2:
         col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 2])
         
         with col_btn1:
-            gerar_insight = st.button("🔄 Gerar Análise", use_container_width=True, key="btn_gerar_insights", type="primary")
+            gerar_insight = st.button("🔄 Gerar Análise", width='stretch', key="btn_gerar_insights", type="primary")
         
         with col_btn2:
             if 'insights_gerados' in st.session_state:
-                if st.button("🗑️ Limpar Cache", use_container_width=True, key="btn_limpar_insights"):
+                if st.button("🗑️ Limpar Cache", width='stretch', key="btn_limpar_insights"):
                     del st.session_state['insights_gerados']
                     st.rerun()
         
@@ -747,7 +755,7 @@ with tab2:
                 )
             
             with col_send:
-                enviar_msg = st.button("📤", use_container_width=True, key="btn_enviar_chat")
+                enviar_msg = st.button("📤", width='stretch', key="btn_enviar_chat")
             
             # Processar mensagem
             if enviar_msg and user_input:
@@ -1009,7 +1017,7 @@ with tab3:
                 color_continuous_scale='Blues'
             )
             fig.update_layout(height=300, showlegend=False)
-            st.plotly_chart(fig, use_container_width=True, key="demos_by_vendor_chart")
+            st.plotly_chart(fig, width='stretch', key="demos_by_vendor_chart")
         
         with col_charts[1]:
             # Tabela resumo
@@ -1298,7 +1306,7 @@ with tab6:
                             color_continuous_scale='Blues'
                         )
                         fig.update_layout(height=400, xaxis_tickangle=-45)
-                        st.plotly_chart(fig, use_container_width=True, key="tempo_etapa_chart")
+                        st.plotly_chart(fig, width='stretch', key="tempo_etapa_chart")
                 
                 with col_table:
                     st.markdown("**Ranking de Etapas**")
@@ -1489,7 +1497,7 @@ with tab7:
                 hovertemplate='<b>%{y}</b> discagens<extra>%{fullData.name}</extra>'
             )
             
-            st.plotly_chart(fig_discagens_dia, use_container_width=True)
+            st.plotly_chart(fig_discagens_dia, width='stretch')
             
             # Mini resumo abaixo do gráfico
             col_resumo2, col_resumo3, col_resumo4 = st.columns(3)
@@ -1598,7 +1606,7 @@ with tab7:
                 fig_funil.update_traces(textposition='outside', textfont_size=18, textfont=dict(family="Arial", color="white", weight="bold"))
                 fig_funil.update_yaxes(categoryorder='array', categoryarray=['Discagens', 'Atendidas', 'Efetivas'], tickfont=dict(size=18))
                 fig_funil.update_layout(height=610, yaxis_title='')
-                st.plotly_chart(fig_funil, use_container_width=True)
+                st.plotly_chart(fig_funil, width='stretch')
             
             with col_funil2:
                 st.markdown("**Taxas de Conversão**")
@@ -1659,7 +1667,7 @@ with tab7:
                     fig_ranking.update_traces(textposition='outside', textfont_size=14)
                     fig_ranking.update_xaxes(tickfont=dict(size=12), tickangle=-45)
                     fig_ranking.update_layout(height=400, coloraxis_colorbar=dict(tickfont=dict(size=12)))
-                    st.plotly_chart(fig_ranking, use_container_width=True)
+                    st.plotly_chart(fig_ranking, width='stretch')
                 
                 with col_rank2:
                     # Gráfico de dispersão - Taxa de Efetividade vs Volume
@@ -1676,7 +1684,7 @@ with tab7:
                     fig_scatter.update_layout(height=400, showlegend=True)
                     fig_scatter.update_xaxes(tickfont=dict(size=16))
                     fig_scatter.update_yaxes(tickfont=dict(size=16))
-                    st.plotly_chart(fig_scatter, use_container_width=True)
+                    st.plotly_chart(fig_scatter, width='stretch')
                 
                 # Tabela de ranking
                 st.dataframe(
@@ -1723,7 +1731,7 @@ with tab7:
                 fig_motivos.update_yaxes(categoryorder='total descending', tickfont=dict(size=14))
                 fig_motivos.update_xaxes(showticklabels=False)
                 fig_motivos.update_layout(height=400, yaxis_title='', xaxis_title='', coloraxis_colorbar=dict(tickfont=dict(size=14)))
-                st.plotly_chart(fig_motivos, use_container_width=True)
+                st.plotly_chart(fig_motivos, width='stretch')
             
             with col_dist2:
                 # Distribuição de duração (apenas atendidas)
@@ -1746,7 +1754,7 @@ with tab7:
                     fig_duracao.update_yaxes(title_text='Ligações', range=[0, max_count * 0.9], showticklabels=False)
                     fig_duracao.add_vline(x=50/60, line_dash="dash", line_color="red", 
                                          annotation_text="Limite Efetiva (50s)")
-                    st.plotly_chart(fig_duracao, use_container_width=True)
+                    st.plotly_chart(fig_duracao, width='stretch')
                 else:
                     st.info("Sem ligações atendidas para análise de duração")
             
@@ -2069,7 +2077,7 @@ with tab8:
                     color_continuous_scale='Blues'
                 )
                 fig_vendas_vendedor.update_layout(height=400, xaxis_tickangle=-45)
-                st.plotly_chart(fig_vendas_vendedor, use_container_width=True)
+                st.plotly_chart(fig_vendas_vendedor, width='stretch')
             
             with col_chart_v2:
                 # Gráfico de barras - Taxa de conversão por vendedor
@@ -2083,7 +2091,7 @@ with tab8:
                     color_continuous_scale='Greens'
                 )
                 fig_conversao_vendedor.update_layout(height=400, xaxis_tickangle=-45)
-                st.plotly_chart(fig_conversao_vendedor, use_container_width=True)
+                st.plotly_chart(fig_conversao_vendedor, width='stretch')
             
             # Tabela de desempenho
             st.dataframe(
@@ -2136,7 +2144,7 @@ with tab8:
             )
             fig_historico.update_traces(line_color='#4A9FFF', line_width=3)
             fig_historico.update_layout(height=400, hovermode='x unified')
-            st.plotly_chart(fig_historico, use_container_width=True)
+            st.plotly_chart(fig_historico, width='stretch')
         
         with col_hist2:
             st.markdown("**Estatísticas do Período**")
@@ -2181,7 +2189,7 @@ with tab8:
                 color_continuous_scale='Blues'
             )
             fig_dia_semana.update_layout(height=350)
-            st.plotly_chart(fig_dia_semana, use_container_width=True)
+            st.plotly_chart(fig_dia_semana, width='stretch')
         
         with col_ins2:
             st.markdown("**📋 Distribuição por Pipeline**")
@@ -2197,7 +2205,7 @@ with tab8:
                     title='Vendas por Pipeline'
                 )
                 fig_pipeline.update_layout(height=350)
-                st.plotly_chart(fig_pipeline, use_container_width=True)
+                st.plotly_chart(fig_pipeline, width='stretch')
         
         st.markdown("")
         
@@ -2219,7 +2227,7 @@ with tab8:
                 color_discrete_sequence=['#4A9FFF']
             )
             fig_tempo_dist.update_layout(height=350)
-            st.plotly_chart(fig_tempo_dist, use_container_width=True)
+            st.plotly_chart(fig_tempo_dist, width='stretch')
         
         with col_ciclo2:
             st.markdown("**📊 Estatísticas de Tempo**")
@@ -2491,7 +2499,7 @@ with tab9:
                     yaxis={'categoryorder': 'total ascending'}
                 )
                 fig_demos.update_traces(textposition='outside', textfont_size=11)
-                st.plotly_chart(fig_demos, use_container_width=True)
+                st.plotly_chart(fig_demos, width='stretch')
             
             with col_graf2:
                 # Taxa de desqualificação por campanha (mínimo 3 demos)
@@ -2516,7 +2524,7 @@ with tab9:
                         yaxis={'categoryorder': 'total ascending'}
                     )
                     fig_desq.update_traces(textposition='outside', textfont_size=12)
-                    st.plotly_chart(fig_desq, use_container_width=True)
+                    st.plotly_chart(fig_desq, width='stretch')
                 else:
                     st.info("Dados insuficientes para análise de desqualificação (mínimo 3 demos por campanha)")
             
@@ -2656,7 +2664,7 @@ with tab9:
                         color_continuous_scale='Reds'
                     )
                     fig_motivos.update_layout(height=max(300, len(df_motivos) * 40), showlegend=False)
-                    st.plotly_chart(fig_motivos, use_container_width=True)
+                    st.plotly_chart(fig_motivos, width='stretch')
                 
                 with col_tabela:
                     st.markdown("**📊 Resumo**")
@@ -2743,6 +2751,69 @@ with tab9:
             st.success("✨ Nenhuma demonstração foi desqualificada no período!")
     else:
         st.info("ℹ️ Nenhuma demonstração realizada no período selecionado.")
+
+# ========================================
+# ABA 10: MARKETING ANALYTICS
+# ========================================
+with tab10:
+    # Usar leads filtrados apenas por criado_em para análise de marketing
+    # Isso garante que só apareçam leads realmente criados no período
+    
+    # Buscar leads usando RPC otimizada (apenas por criado_em)
+    with st.spinner("⏳ Carregando dados de marketing..."):
+        df_marketing = service_get_leads_by_criado_em(
+            datetime.combine(data_inicio, datetime.min.time()),
+            datetime.combine(data_fim, datetime.max.time()),
+            vendedores=vendedores_selecionados if vendedores_selecionados else None,
+            pipelines=pipelines_selecionados if pipelines_selecionados else None
+        )
+    
+    # Se há dados do período anterior disponível, carregar para comparação
+    df_marketing_anterior = None
+    
+    # Calcular período anterior (mesma duração, imediatamente antes)
+    dias_periodo = (data_fim - data_inicio).days + 1
+    data_inicio_anterior = data_inicio - timedelta(days=dias_periodo)
+    data_fim_anterior = data_inicio - timedelta(days=1)
+    
+    logger.info(
+        "Marketing Analytics - Período anterior calculado",
+        periodo_atual_inicio=str(data_inicio),
+        periodo_atual_fim=str(data_fim),
+        dias_periodo=dias_periodo,
+        periodo_anterior_inicio=str(data_inicio_anterior),
+        periodo_anterior_fim=str(data_fim_anterior)
+    )
+    
+    # Tentar carregar dados do período anterior para comparação
+    try:
+        df_marketing_anterior = service_get_leads_by_criado_em(
+            datetime.combine(data_inicio_anterior, datetime.min.time()),
+            datetime.combine(data_fim_anterior, datetime.max.time()),
+            vendedores=vendedores_selecionados if vendedores_selecionados else None,
+            pipelines=pipelines_selecionados if pipelines_selecionados else None
+        )
+        
+        logger.info(
+            "Marketing Analytics - Dados período anterior",
+            empty=df_marketing_anterior.empty if df_marketing_anterior is not None else True,
+            records=len(df_marketing_anterior) if df_marketing_anterior is not None and not df_marketing_anterior.empty else 0
+        )
+        
+        if df_marketing_anterior.empty:
+            df_marketing_anterior = None
+    except Exception as e:
+        logger.error("Falha ao carregar período anterior", exception=str(e))
+        df_marketing_anterior = None
+    
+    # Renderizar dashboard de marketing usando o componente
+    render_marketing_dashboard(
+        df_leads=df_marketing,
+        df_leads_anterior=df_marketing_anterior,
+        demo_completed_statuses=DEMO_COMPLETED_STATUSES,
+        data_inicio=data_inicio,
+        data_fim=data_fim
+    )
 
 # Footer
 st.markdown("---")

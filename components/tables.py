@@ -11,7 +11,7 @@ def styled_dataframe(
     column_config: Optional[Dict[str, Any]] = None,
     hide_index: bool = True,
     height: Optional[int] = None,
-    use_container_width: bool = True
+    width: str = "stretch"
 ) -> None:
     """
     Exibe DataFrame com estilo padronizado.
@@ -21,7 +21,7 @@ def styled_dataframe(
         column_config: Configuração de colunas do Streamlit
         hide_index: Ocultar índice
         height: Altura fixa (opcional)
-        use_container_width: Usar largura do container
+        width: Largura do componente ('stretch' ou 'content')
     """
     if df.empty:
         st.info("Nenhum dado disponível")
@@ -36,7 +36,7 @@ def styled_dataframe(
         column_config=column_config,
         hide_index=hide_index,
         height=height,
-        use_container_width=use_container_width
+        width=width
     )
 
 
@@ -81,7 +81,7 @@ def paginated_dataframe(
         df.iloc[start_idx:end_idx],
         column_config=column_config,
         hide_index=True,
-        use_container_width=True
+        width='stretch'
     )
     
     # Info de paginação
@@ -129,7 +129,7 @@ def ranking_table(
     df_sorted = df_sorted[cols]
     
     st.markdown(f"**{title}**")
-    st.dataframe(df_sorted, hide_index=True, use_container_width=True)
+    st.dataframe(df_sorted, hide_index=True, width='stretch')
 
 
 def summary_table(
