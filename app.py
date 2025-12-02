@@ -226,14 +226,11 @@ COMPARAÇÃO COM PERÍODO ANTERIOR:
 ## 📊 Resumo Executivo
 [2-3 frases destacando a performance geral e a principal tendência observada. Inclua pelo menos uma métrica percentual comparativa.]
 
-## ✅ Destaques Positivos
-[Liste até 3 pontos fortes com dados específicos. Priorize melhorias percentuais significativas.]
-
 ## ⚠️ Pontos Críticos de Atenção
 [Liste até 3 gargalos ou quedas de performance com impacto quantificado.]
 
 ## 🎯 Recomendações Estratégicas Priorizadas
-[Liste 3 ações específicas e implementáveis, ordenadas por impacto esperado. Cada recomendação deve indicar qual métrica ela visa melhorar.]
+[Liste até 7 ações específicas e implementáveis, ordenadas por impacto esperado. Cada recomendação deve indicar qual métrica ela visa melhorar.]
 
 **DIRETRIZES DE ESTILO:**
 ✓ Use linguagem clara e objetiva voltada para tomada de decisão

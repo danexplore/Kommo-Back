@@ -37,7 +37,7 @@ def init_gemini():
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         logger.info("Cliente Gemini inicializado com sucesso")
         return model
     except Exception as e:
