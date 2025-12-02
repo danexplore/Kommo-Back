@@ -884,7 +884,7 @@ for data in date_range:
         
     resumo_daily.append({
         'Data': data_date,
-        'Dia': data_date.strftime('%A').lower(),
+        'Dia': data_date.strftime('%A').lower().apply(lambda x: {DIAS_PT[x]}),
         'Novos Leads': novos_leads,
         'Agendamentos': agendamentos,
         'Demos no Dia': demos_dia,
