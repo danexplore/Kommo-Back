@@ -291,6 +291,7 @@ def render_desqualification_analysis(
         return
     
     st.markdown("#### ❌ Análise de Desqualificação por Campanha")
+    st.caption("⚠️ Campanhas com alta taxa de desqualificação podem indicar público errado ou promessa desalinhada")
     
     # Gráfico de barras horizontal
     data = {
@@ -316,10 +317,23 @@ def render_desqualification_analysis(
     fig.update_layout(
         height=max(300, len(df) * 40),
         showlegend=False,
-        xaxis_title="Taxa de Desqualificação (%)",
-        yaxis_title=""
+        xaxis_title="",
+        yaxis_title="",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(
+            tickfont=dict(size=12, color='#CBD5E0'),
+            gridcolor='rgba(255,255,255,0.1)',
+            showgrid=True
+        ),
+        yaxis=dict(
+            tickfont=dict(size=11, color='#CBD5E0')
+        ),
+        margin=dict(l=20, r=20, t=20, b=40),
+        hoverlabel=dict(bgcolor='#2d3748', font_size=14),
+        coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
     )
-    fig.update_traces(textposition='outside')
+    fig.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
     
     st.plotly_chart(fig, width='stretch')
     
@@ -549,7 +563,7 @@ def render_trend_chart(
         return
     
     st.markdown(f"#### 📈 Tendência de Leads por {dimension.display_name} (Top {top_n})")
-    st.caption(f"Acompanhe a evolução diária de leads por {dimension.display_name.lower()} no período")
+    st.caption(f"📅 Evolução diária de leads por {dimension.display_name.lower()} — identifique dias de pico e campanhas em ascensão")
     
     # Converter data para datetime se necessário
     df['data'] = pd.to_datetime(df['data'])
@@ -637,7 +651,7 @@ def render_marketing_dashboard(
         data_fim: Data final do período selecionado
     """
     st.markdown("### 📣 Análise Avançada de Marketing")
-    st.caption("Insights detalhados sobre performance de campanhas, fontes e ROI")
+    st.caption("🤖 Análise automatizada com recomendações estratégicas baseadas em padrões de performance")
     
     # Criar analyzer
     analyzer = MarketingAnalyzer(

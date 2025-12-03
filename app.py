@@ -30,6 +30,7 @@ from services import (
     get_all_leads_for_summary,
     get_chamadas_vendedores as service_get_chamadas,
     get_tempo_por_etapa,
+    get_hour_noshow_analitycs,
 )
 from core import (
     generate_kommo_link,
@@ -440,7 +441,8 @@ if pipelines_selecionados:
         st.stop()
 
 # Aplicar lógica de negócio
-hoje = pd.Timestamp(datetime.now(TZ_BRASILIA).date())
+hoje_hora = pd.Timestamp(datetime.now(TZ_BRASILIA))
+hoje = pd.Timestamp(hoje_hora.date())
 
 # ========================================
 # BUSCAR DADOS DO MÊS ANTERIOR PARA COMPARAÇÃO
@@ -603,7 +605,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
 with tab1:
     # Calcular leads que exigem atualização
     leads_atualizacao = df_leads[
-        (df_leads['data_demo'] < hoje) &
+        (pd.to_datetime(df_leads['data_hora_demo']) <= hoje_hora) &
         (df_leads['data_noshow'].isna()) &
         (df_leads['data_venda'].isna()) &
         (~df_leads['status'].isin(STATUS_POS_DEMO))
@@ -615,17 +617,17 @@ with tab1:
     
     if not leads_atualizacao.empty:
         # Ordenar por data_demo (mais antiga primeiro)
-        leads_atualizacao = leads_atualizacao.sort_values('data_demo')
+        leads_atualizacao = leads_atualizacao.sort_values('data_hora_demo')
         
         # Preparar DataFrame para exibição
         df_atualizacao_display = leads_atualizacao[[
-            'id', 'lead_name', 'vendedor', 'status', 'data_demo'
+            'id', 'lead_name', 'vendedor', 'status', 'data_hora_demo'
         ]].copy()
         
-        df_atualizacao_display.columns = ['ID', 'Lead', 'Vendedor', 'Status Atual', 'Data da Demo']
+        df_atualizacao_display.columns = ['ID', 'Lead', 'Vendedor', 'Status Atual', 'Data e Hora']
         
-        # Formatar data
-        df_atualizacao_display['Data da Demo'] = df_atualizacao_display['Data da Demo'].dt.strftime('%d/%m/%Y')
+        # Formatar data - converter para timezone de Brasília
+        df_atualizacao_display['Data e Hora'] = pd.to_datetime(df_atualizacao_display['Data e Hora'], utc=True).dt.tz_convert('America/Sao_Paulo').dt.strftime('%d/%m/%Y %H:%M')
         
         # Adicionar link
         df_atualizacao_display['Link'] = df_atualizacao_display['ID'].apply(generate_kommo_link)
@@ -634,7 +636,7 @@ with tab1:
         
         # Exibir tabela com links clicáveis
         st.dataframe(
-            df_atualizacao_display[['Lead', 'Vendedor', 'Status Atual', 'Data da Demo', 'Link']],
+            df_atualizacao_display[['Lead', 'Vendedor', 'Status Atual', 'Data e Hora', 'Link']],
             column_config={
                 "Link": st.column_config.LinkColumn(
                     "Link Kommo",
@@ -999,6 +1001,7 @@ with tab3:
         
         st.markdown("")
         st.markdown("#### 👥 Demos por Vendedor")
+        st.caption("📌 Distribuição de demonstrações agendadas para hoje entre os vendedores da equipe")
         
         col_charts = st.columns([2, 1])
         
@@ -1011,9 +1014,28 @@ with tab3:
                 title='Quantidade de Demos por Vendedor Hoje',
                 labels={'vendedor': 'Vendedor', 'Total': 'Quantidade'},
                 color='Total',
-                color_continuous_scale='Blues'
+                color_continuous_scale='Blues',
+                text='Total'
             )
-            fig.update_layout(height=300, showlegend=False)
+            fig.update_layout(
+                height=300,
+                showlegend=False,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)',
+                    tickangle=-45
+                ),
+                yaxis=dict(
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)',
+                    showgrid=True
+                ),
+                margin=dict(l=20, r=20, t=40, b=60),
+                hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+            )
+            fig.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
             st.plotly_chart(fig, width='stretch', key="demos_by_vendor_chart")
         
         with col_charts[1]:
@@ -1034,6 +1056,130 @@ with tab3:
             description="Não há demonstrações pendentes de realização para o dia de hoje.",
             suggestion="Verifique os filtros de vendedor ou consulte a aba 'Demos Realizadas'."
         )
+    
+    # Carregar análise de no-show por hora (usar dates da sidebar para período)
+    st.markdown("---")
+    st.markdown("#### 🕐 Taxa de No-show por Hora do Dia")
+    st.caption("📊 Análise histórica de ausências por horário — use para evitar agendar em horários críticos e melhorar a taxa de comparecimento")
+    
+    with st.spinner("⏳ Analisando taxa de no-show por hora..."):
+        df_noshow_analise = get_hour_noshow_analitycs(
+            datetime.combine(data_inicio, datetime.min.time()),
+            datetime.combine(data_fim, datetime.max.time())
+        )
+    
+    if not df_noshow_analise.empty:
+        # Ordenar por hora
+        df_noshow_analise = df_noshow_analise.sort_values('hora_demo', key=pd.to_numeric)
+        
+        # Preparar dados para visualização
+        df_noshow_display = df_noshow_analise.copy()
+        df_noshow_display['hora_demo'] = df_noshow_display['hora_demo'].astype(str).str.zfill(2) + ':00'
+        
+        # Criar colunas para exibição
+        col_chart, col_table = st.columns([2, 1])
+        
+        with col_chart:
+            # Gráfico de barras
+            fig = px.bar(
+                df_noshow_display,
+                x='hora_demo',
+                y='taxa_noshow_percentual',
+                title='Taxa de No-show por Horário',
+                labels={
+                    'hora_demo': 'Horário',
+                    'taxa_noshow_percentual': 'Taxa de No-show (%)'
+                },
+                color='taxa_noshow_percentual',
+                color_continuous_scale='Reds',
+                hover_data={
+                    'total_demos_agendadas': True,
+                    'total_noshows': True,
+                    'taxa_noshow_percentual': ':.1f'
+                },
+                text=df_noshow_display['taxa_noshow_percentual'].apply(lambda x: f'{x:.1f}%')
+            )
+            fig.update_layout(
+                height=400,
+                showlegend=False,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)'
+                ),
+                yaxis=dict(
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)',
+                    showgrid=True
+                ),
+                margin=dict(l=20, r=20, t=40, b=40),
+                hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+            )
+            fig.update_traces(textposition='outside', textfont=dict(size=11, color='#CBD5E0'))
+            st.plotly_chart(fig, width='stretch')
+        
+        with col_table:
+            # Tabela resumida
+            df_resumo_noshow = df_noshow_display[[
+                'hora_demo',
+                'total_demos_agendadas',
+                'total_noshows',
+                'taxa_noshow_percentual'
+            ]].copy()
+            
+            df_resumo_noshow.columns = ['Horário', 'Demos', 'No-shows', 'Taxa (%)']
+            
+            st.dataframe(
+                df_resumo_noshow,
+                column_config={
+                    "Horário": st.column_config.TextColumn("Horário"),
+                    "Demos": st.column_config.NumberColumn("Demos", format="%d"),
+                    "No-shows": st.column_config.NumberColumn("No-shows", format="%d"),
+                    "Taxa (%)": st.column_config.NumberColumn("Taxa", format="%.1f%%")
+                },
+                hide_index=True,
+                width='stretch',
+                height=400
+            )
+        
+        # Insights
+        st.markdown("")
+        
+        # Encontrar hora com maior e menor no-show
+        max_noshow_idx = df_noshow_analise['taxa_noshow_percentual'].idxmax()
+        min_noshow_idx = df_noshow_analise['taxa_noshow_percentual'].idxmin()
+        
+        max_hora = df_noshow_analise.loc[max_noshow_idx]
+        min_hora = df_noshow_analise.loc[min_noshow_idx]
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.warning(f"""
+            **⚠️ Horário Crítico:** {max_hora['hora_demo'].zfill(2)}:00
+            
+            Taxa de no-show: **{max_hora['taxa_noshow_percentual']:.1f}%**
+            
+            - Demos agendadas: {int(max_hora['total_demos_agendadas'])}
+            - No-shows: {int(max_hora['total_noshows'])}
+            
+            💡 Considere revisar a estratégia de agendamento neste horário
+            """)
+        
+        with col2:
+            st.success(f"""
+            **✅ Melhor Horário:** {min_hora['hora_demo'].zfill(2)}:00
+            
+            Taxa de no-show: **{min_hora['taxa_noshow_percentual']:.1f}%**
+            
+            - Demos agendadas: {int(min_hora['total_demos_agendadas'])}
+            - No-shows: {int(min_hora['total_noshows'])}
+            
+            💡 Priorize agendamentos neste horário
+            """)
+    else:
+        st.info("📊 Sem dados de análise de no-show por hora no período selecionado")
 
 # ========================================
 # ABA 4: RESUMO DIÁRIO
@@ -1244,7 +1390,7 @@ with tab5:
 # ========================================
 with tab6:
     st.markdown("### ⏱️ Tempo Médio por Etapa")
-    st.caption("Visualize quanto tempo os leads ficam em média em cada etapa do funil")
+    st.caption("⚡ Identifique gargalos no funil — etapas com tempo elevado indicam onde os leads estão 'travando' e precisam de atenção")
     
     # Buscar dados de tempo por etapa
     df_tempo = get_tempo_por_etapa()
@@ -1300,9 +1446,27 @@ with tab6:
                             title='Tempo Médio por Etapa',
                             labels={'Etapa': 'Etapa do Funil', 'Tempo Médio (dias)': 'Dias'},
                             color='Tempo Médio (dias)',
-                            color_continuous_scale='Blues'
+                            color_continuous_scale='Blues',
+                            text=df_tempo_filtrado['Tempo Médio (dias)'].apply(lambda x: f'{x:.1f}d')
                         )
-                        fig.update_layout(height=400, xaxis_tickangle=-45)
+                        fig.update_layout(
+                            height=400,
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            xaxis=dict(
+                                tickfont=dict(size=11, color='#CBD5E0'),
+                                gridcolor='rgba(255,255,255,0.1)',
+                                tickangle=-45
+                            ),
+                            yaxis=dict(
+                                tickfont=dict(size=12, color='#CBD5E0'),
+                                gridcolor='rgba(255,255,255,0.1)',
+                                showgrid=True
+                            ),
+                            margin=dict(l=20, r=20, t=40, b=80),
+                            hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+                        )
+                        fig.update_traces(textposition='outside', textfont=dict(size=10, color='#CBD5E0'))
                         st.plotly_chart(fig, width='stretch', key="tempo_etapa_chart")
                 
                 with col_table:
@@ -1410,7 +1574,7 @@ with tab7:
             # SEÇÃO 0: DISCAGENS POR VENDEDOR POR DIA
             # ========================================
             st.markdown("#### 📈 Discagens por Vendedor por Dia")
-            st.caption("Acompanhe a evolução diária das ligações de cada vendedor no período")
+            st.caption("📞 Evolução do volume de ligações — identifique padrões, picos de produtividade e dias com baixo desempenho")
             
             # Preparar dados para o gráfico de linhas
             df_chamadas['data'] = df_chamadas['atendido_em'].dt.date
@@ -1518,6 +1682,7 @@ with tab7:
             # SEÇÃO 1: MÉTRICAS PRINCIPAIS
             # ========================================
             st.markdown("#### 📊 Métricas de Performance")
+            st.caption("🎯 KPIs principais de telefonia — compare taxa de atendimento e efetividade para avaliar qualidade das ligações")
             
             total_discagens = len(df_vendedor)
             total_atendidas = len(df_vendedor[df_vendedor['causa_desligamento'] == 'Atendida'])
@@ -1575,6 +1740,7 @@ with tab7:
             # SEÇÃO 2: FUNIL DE CONVERSÃO
             # ========================================
             st.markdown("#### 🔄 Funil de Conversão de Chamadas")
+            st.caption("🔽 Visualização das etapas de conversão — de discagem até ligação efetiva (>50s)")
             
             col_funil1, col_funil2 = st.columns([2, 1])
             
@@ -1600,9 +1766,25 @@ with tab7:
                     text='Label',
                     color_discrete_map={'Efetivas': '#4CAF50', 'Atendidas': '#FFA500', 'Discagens': '#4A9FFF'}
                 )
-                fig_funil.update_traces(textposition='outside', textfont_size=18, textfont=dict(family="Arial", color="white", weight="bold"))
-                fig_funil.update_yaxes(categoryorder='array', categoryarray=['Discagens', 'Atendidas', 'Efetivas'], tickfont=dict(size=18))
-                fig_funil.update_layout(height=610, yaxis_title='')
+                fig_funil.update_traces(
+                    textposition='outside',
+                    textfont_size=18,
+                    textfont=dict(family="Arial", color="white", weight="bold")
+                )
+                fig_funil.update_yaxes(
+                    categoryorder='array',
+                    categoryarray=['Discagens', 'Atendidas', 'Efetivas'],
+                    tickfont=dict(size=18, color='#CBD5E0')
+                )
+                fig_funil.update_layout(
+                    height=610,
+                    yaxis_title='',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    showlegend=False,
+                    margin=dict(l=20, r=20, t=60, b=40),
+                    hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+                )
                 st.plotly_chart(fig_funil, width='stretch')
             
             with col_funil2:
@@ -1629,6 +1811,7 @@ with tab7:
             # ========================================
             if vendedor_selecionado == 'Todos':
                 st.markdown("#### 🏆 Ranking de Vendedores")
+                st.caption("🏅 Compare a performance entre vendedores — volume de discagens vs efetividade")
                 
                 # Agregar métricas por vendedor
                 df_ranking = df_chamadas.groupby('name').agg({
@@ -1661,9 +1844,25 @@ with tab7:
                         color_continuous_scale='Greens',
                         text='Efetivas'
                     )
-                    fig_ranking.update_traces(textposition='outside', textfont_size=14)
-                    fig_ranking.update_xaxes(tickfont=dict(size=12), tickangle=-45)
-                    fig_ranking.update_layout(height=400, coloraxis_colorbar=dict(tickfont=dict(size=12)))
+                    fig_ranking.update_traces(textposition='outside', textfont=dict(size=14, color='#CBD5E0'))
+                    fig_ranking.update_layout(
+                        height=400,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        coloraxis_colorbar=dict(tickfont=dict(size=12, color='#CBD5E0')),
+                        xaxis=dict(
+                            tickfont=dict(size=12, color='#CBD5E0'),
+                            gridcolor='rgba(255,255,255,0.1)',
+                            tickangle=-45
+                        ),
+                        yaxis=dict(
+                            tickfont=dict(size=12, color='#CBD5E0'),
+                            gridcolor='rgba(255,255,255,0.1)',
+                            showgrid=True
+                        ),
+                        margin=dict(l=20, r=20, t=40, b=80),
+                        hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+                    )
                     st.plotly_chart(fig_ranking, width='stretch')
                 
                 with col_rank2:
@@ -1675,12 +1874,38 @@ with tab7:
                         size='Efetivas',
                         color='Vendedor',
                         title='Eficiência vs Volume',
-                        labels={'Discagens': 'Volume de Discagens', 'Taxa Efet. (%)': 'Taxa de Efetividade (%)'},
+                        labels={'Discagens': '', 'Taxa Efet. (%)': ''},
                         hover_data=['Atendidas', 'Efetivas', 'TMD (min)']
                     )
-                    fig_scatter.update_layout(height=400, showlegend=True)
-                    fig_scatter.update_xaxes(tickfont=dict(size=16))
-                    fig_scatter.update_yaxes(tickfont=dict(size=16))
+                    fig_scatter.update_layout(
+                        height=400,
+                        showlegend=True,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=1.02,
+                            xanchor="center",
+                            x=0.5,
+                            font=dict(size=11, color='#ffffff'),
+                            bgcolor='rgba(0,0,0,0)'
+                        ),
+                        xaxis=dict(
+                            tickfont=dict(size=12, color='#CBD5E0'),
+                            gridcolor='rgba(255,255,255,0.1)',
+                            showgrid=True,
+                            title=dict(text='Volume de Discagens', font=dict(size=12, color='#CBD5E0'))
+                        ),
+                        yaxis=dict(
+                            tickfont=dict(size=12, color='#CBD5E0'),
+                            gridcolor='rgba(255,255,255,0.1)',
+                            showgrid=True,
+                            title=dict(text='Taxa de Efetividade (%)', font=dict(size=12, color='#CBD5E0'))
+                        ),
+                        margin=dict(l=50, r=20, t=60, b=50),
+                        hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+                    )
                     st.plotly_chart(fig_scatter, width='stretch')
                 
                 # Tabela de ranking
@@ -1706,6 +1931,7 @@ with tab7:
             # SEÇÃO 4: DISTRIBUIÇÃO DE RESULTADOS
             # ========================================
             st.markdown("#### 📈 Análise de Resultados das Chamadas")
+            st.caption("📉 Distribuição de resultados e duração — identifique motivos de desligamento e padrões de duração")
             
             col_dist1, col_dist2 = st.columns(2)
             
@@ -1724,10 +1950,25 @@ with tab7:
                     color_continuous_scale='Blues',
                     text='Quantidade'
                 )
-                fig_motivos.update_traces(textposition='outside', textfont_size=16)
-                fig_motivos.update_yaxes(categoryorder='total descending', tickfont=dict(size=14))
-                fig_motivos.update_xaxes(showticklabels=False)
-                fig_motivos.update_layout(height=400, yaxis_title='', xaxis_title='', coloraxis_colorbar=dict(tickfont=dict(size=14)))
+                fig_motivos.update_traces(textposition='outside', textfont=dict(size=14, color='#CBD5E0'))
+                fig_motivos.update_layout(
+                    height=400,
+                    yaxis_title='',
+                    xaxis_title='',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    coloraxis_colorbar=dict(tickfont=dict(size=14, color='#CBD5E0')),
+                    yaxis=dict(
+                        categoryorder='total descending',
+                        tickfont=dict(size=14, color='#CBD5E0')
+                    ),
+                    xaxis=dict(
+                        showticklabels=False,
+                        gridcolor='rgba(255,255,255,0.1)'
+                    ),
+                    margin=dict(l=20, r=20, t=40, b=40),
+                    hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+                )
                 st.plotly_chart(fig_motivos, width='stretch')
             
             with col_dist2:
@@ -1740,17 +1981,42 @@ with tab7:
                         x='duration_minutos',
                         nbins=20,
                         title='Distribuição de Duração (Ligações Atendidas)',
-                        labels={'duration_minutos': 'Duração (minutos)', 'count': 'Ligações'},
+                        labels={'duration_minutos': '', 'count': ''},
                         color_discrete_sequence=['#4A9FFF'],
                         text_auto=True
                     )
-                    fig_duracao.update_traces(textposition='outside', textfont_size=14, marker_line_width=1.5)
-                    fig_duracao.update_layout(height=400, showlegend=False, bargap=0.1)
+                    fig_duracao.update_traces(
+                        textposition='outside',
+                        textfont=dict(size=12, color='#CBD5E0'),
+                        marker_line_width=1.5,
+                        marker_line_color='#1a1f2e'
+                    )
                     # Calcular o máximo valor para limitar o range
                     max_count = len(df_atendidas_duracao)
-                    fig_duracao.update_yaxes(title_text='Ligações', range=[0, max_count * 0.9], showticklabels=False)
+                    fig_duracao.update_layout(
+                        height=400,
+                        showlegend=False,
+                        bargap=0.1,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        xaxis=dict(
+                            tickfont=dict(size=12, color='#CBD5E0'),
+                            gridcolor='rgba(255,255,255,0.1)',
+                            title=dict(text='Duração (minutos)', font=dict(size=12, color='#CBD5E0'))
+                        ),
+                        yaxis=dict(
+                            title_text='Ligações',
+                            tickfont=dict(size=12, color='#CBD5E0'),
+                            gridcolor='rgba(255,255,255,0.1)',
+                            range=[0, max_count * 0.9],
+                            showticklabels=False
+                        ),
+                        margin=dict(l=20, r=20, t=40, b=50),
+                        hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+                    )
                     fig_duracao.add_vline(x=50/60, line_dash="dash", line_color="red", 
-                                         annotation_text="Limite Efetiva (50s)")
+                                         annotation_text="Limite Efetiva (50s)",
+                                         annotation_font=dict(color='#CBD5E0'))
                     st.plotly_chart(fig_duracao, width='stretch')
                 else:
                     st.info("Sem ligações atendidas para análise de duração")
@@ -1761,6 +2027,7 @@ with tab7:
             # SEÇÃO 5: TABELA DE LIGAÇÕES EFETIVAS
             # ========================================
             st.markdown("#### 🎯 Ligações Efetivas (Duração > 50s)")
+            st.caption("✅ Ligações com conversação real — acesse as gravações para análise de qualidade e treinamento")
             
             df_efetivas = df_vendedor[df_vendedor['efetiva']].copy()
             
@@ -1807,6 +2074,7 @@ with tab7:
             # SEÇÃO 6: TABELA DE TODAS AS DISCAGENS
             # ========================================
             st.markdown("#### 📞 Histórico Completo de Discagens")
+            st.caption("📝 Todas as tentativas de ligação com detalhes — filtre e exporte para análise detalhada")
             
             # Preparar dados
             df_discagens = df_vendedor.copy()
@@ -1997,6 +2265,7 @@ with tab8:
         # SEÇÃO 1: MÉTRICAS GERAIS DE VENDAS
         # ========================================
         st.markdown("#### 📊 Métricas Gerais")
+        st.caption("💰 Resumo do período — total de vendas, ticket médio e tempo de conversão")
         
         col_v1, col_v2, col_v3, col_v4, col_v5 = st.columns(5)
         
@@ -2039,6 +2308,7 @@ with tab8:
         # SEÇÃO 2: VENDAS POR VENDEDOR
         # ========================================
         st.markdown("#### 👥 Desempenho por Vendedor")
+        st.caption("👤 Ranking de vendas e taxa de conversão por vendedor — identifique top performers e oportunidades de coaching")
         
         if 'vendedor' in df_vendas.columns:
             # Agregar dados por vendedor
@@ -2069,11 +2339,30 @@ with tab8:
                     x='Vendedor',
                     y='Total Vendas',
                     title='Top 10 Vendedores - Total de Vendas',
-                    labels={'Vendedor': 'Vendedor', 'Total Vendas': 'Quantidade'},
+                    labels={'Vendedor': '', 'Total Vendas': ''},
                     color='Total Vendas',
-                    color_continuous_scale='Blues'
+                    color_continuous_scale='Blues',
+                    text='Total Vendas'
                 )
-                fig_vendas_vendedor.update_layout(height=400, xaxis_tickangle=-45)
+                fig_vendas_vendedor.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+                fig_vendas_vendedor.update_layout(
+                    height=400,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(
+                        tickfont=dict(size=11, color='#CBD5E0'),
+                        gridcolor='rgba(255,255,255,0.1)',
+                        tickangle=-45
+                    ),
+                    yaxis=dict(
+                        tickfont=dict(size=12, color='#CBD5E0'),
+                        gridcolor='rgba(255,255,255,0.1)',
+                        showgrid=True
+                    ),
+                    margin=dict(l=20, r=20, t=40, b=80),
+                    hoverlabel=dict(bgcolor='#2d3748', font_size=14),
+                    coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
+                )
                 st.plotly_chart(fig_vendas_vendedor, width='stretch')
             
             with col_chart_v2:
@@ -2083,11 +2372,30 @@ with tab8:
                     x='Vendedor',
                     y='Taxa Conversão (%)',
                     title='Top 10 Vendedores - Taxa de Conversão',
-                    labels={'Vendedor': 'Vendedor', 'Taxa Conversão (%)': 'Taxa (%)'},
+                    labels={'Vendedor': '', 'Taxa Conversão (%)': ''},
                     color='Taxa Conversão (%)',
-                    color_continuous_scale='Greens'
+                    color_continuous_scale='Greens',
+                    text=df_vendedor_stats.head(10)['Taxa Conversão (%)'].apply(lambda x: f'{x:.1f}%')
                 )
-                fig_conversao_vendedor.update_layout(height=400, xaxis_tickangle=-45)
+                fig_conversao_vendedor.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+                fig_conversao_vendedor.update_layout(
+                    height=400,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(
+                        tickfont=dict(size=11, color='#CBD5E0'),
+                        gridcolor='rgba(255,255,255,0.1)',
+                        tickangle=-45
+                    ),
+                    yaxis=dict(
+                        tickfont=dict(size=12, color='#CBD5E0'),
+                        gridcolor='rgba(255,255,255,0.1)',
+                        showgrid=True
+                    ),
+                    margin=dict(l=20, r=20, t=40, b=80),
+                    hoverlabel=dict(bgcolor='#2d3748', font_size=14),
+                    coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
+                )
                 st.plotly_chart(fig_conversao_vendedor, width='stretch')
             
             # Tabela de desempenho
@@ -2110,6 +2418,7 @@ with tab8:
         # SEÇÃO 3: HISTÓRICO DE VENDAS
         # ========================================
         st.markdown("#### 📈 Histórico de Vendas")
+        st.caption("📅 Evolução diária de vendas — acompanhe tendências e identifique dias atípicos")
         
         # Criar range completo de datas do período
         date_range_vendas = pd.date_range(start=data_inicio, end=data_fim, freq='D')
@@ -2136,11 +2445,34 @@ with tab8:
                 x='Data',
                 y='vendas',
                 title='Evolução de Vendas no Período',
-                labels={'Data': 'Data', 'vendas': 'Quantidade de Vendas'},
+                labels={'Data': '', 'vendas': ''},
                 markers=True
             )
-            fig_historico.update_traces(line_color='#4A9FFF', line_width=3)
-            fig_historico.update_layout(height=400, hovermode='x unified')
+            fig_historico.update_traces(
+                line_color='#4A9FFF',
+                line_width=2.5,
+                marker=dict(size=8, line=dict(width=1, color='#1a1f2e'))
+            )
+            fig_historico.update_layout(
+                height=400,
+                hovermode='x unified',
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)',
+                    showgrid=True,
+                    tickangle=0
+                ),
+                yaxis=dict(
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)',
+                    showgrid=True,
+                    zeroline=False
+                ),
+                margin=dict(l=20, r=20, t=40, b=40),
+                hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+            )
             st.plotly_chart(fig_historico, width='stretch')
         
         with col_hist2:
@@ -2161,6 +2493,7 @@ with tab8:
         # SEÇÃO 4: INSIGHTS DE VENDAS
         # ========================================
         st.markdown("#### 💡 Insights e Análises")
+        st.caption("🔍 Padrões de vendas por dia da semana e distribuição por pipeline")
         
         col_ins1, col_ins2 = st.columns(2)
         
@@ -2181,11 +2514,29 @@ with tab8:
                 x='dia',
                 y='vendas',
                 title='Vendas por Dia da Semana',
-                labels={'dia': 'Dia', 'vendas': 'Vendas'},
+                labels={'dia': '', 'vendas': ''},
                 color='vendas',
-                color_continuous_scale='Blues'
+                color_continuous_scale='Blues',
+                text='vendas'
             )
-            fig_dia_semana.update_layout(height=350)
+            fig_dia_semana.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+            fig_dia_semana.update_layout(
+                height=350,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(
+                    tickfont=dict(size=11, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)'
+                ),
+                yaxis=dict(
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)',
+                    showgrid=True
+                ),
+                margin=dict(l=20, r=20, t=40, b=40),
+                hoverlabel=dict(bgcolor='#2d3748', font_size=14),
+                coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
+            )
             st.plotly_chart(fig_dia_semana, width='stretch')
         
         with col_ins2:
@@ -2201,7 +2552,23 @@ with tab8:
                     names='Pipeline',
                     title='Vendas por Pipeline'
                 )
-                fig_pipeline.update_layout(height=350)
+                fig_pipeline.update_layout(
+                    height=350,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=-0.2,
+                        xanchor="center",
+                        x=0.5,
+                        font=dict(size=11, color='#ffffff'),
+                        bgcolor='rgba(0,0,0,0)'
+                    ),
+                    margin=dict(l=20, r=20, t=40, b=60),
+                    hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+                )
+                fig_pipeline.update_traces(textfont=dict(color='#ffffff'))
                 st.plotly_chart(fig_pipeline, width='stretch')
         
         st.markdown("")
@@ -2210,6 +2577,7 @@ with tab8:
         # SEÇÃO 5: ANÁLISE DE CICLO DE VENDA
         # ========================================
         st.markdown("#### ⏱️ Análise do Ciclo de Venda")
+        st.caption("⏳ Tempo entre criação do lead e fechamento — quanto mais rápido, melhor a eficiência comercial")
         
         col_ciclo1, col_ciclo2 = st.columns(2)
         
@@ -2220,10 +2588,29 @@ with tab8:
                 x='tempo_venda',
                 nbins=20,
                 title='Distribuição do Tempo de Venda (em dias)',
-                labels={'tempo_venda': 'Dias até Venda', 'count': 'Quantidade'},
+                labels={'tempo_venda': '', 'count': ''},
                 color_discrete_sequence=['#4A9FFF']
             )
-            fig_tempo_dist.update_layout(height=350)
+            fig_tempo_dist.update_layout(
+                height=350,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)',
+                    title=dict(text='Dias até Venda', font=dict(size=12, color='#CBD5E0'))
+                ),
+                yaxis=dict(
+                    tickfont=dict(size=12, color='#CBD5E0'),
+                    gridcolor='rgba(255,255,255,0.1)',
+                    showgrid=True,
+                    title=dict(text='Quantidade', font=dict(size=12, color='#CBD5E0'))
+                ),
+                margin=dict(l=50, r=20, t=40, b=50),
+                hoverlabel=dict(bgcolor='#2d3748', font_size=14),
+                bargap=0.1
+            )
+            fig_tempo_dist.update_traces(marker_line_width=1.5, marker_line_color='#1a1f2e')
             st.plotly_chart(fig_tempo_dist, width='stretch')
         
         with col_ciclo2:
@@ -2241,6 +2628,7 @@ with tab8:
         # SEÇÃO 6: TABELA DETALHADA DE VENDAS
         # ========================================
         st.markdown("#### 📋 Detalhes das Vendas")
+        st.caption("🔗 Clique no link para abrir o lead no Kommo e ver todos os detalhes da negociação")
         
         # Preparar tabela de vendas
         df_vendas_table = df_vendas[['id', 'lead_name', 'vendedor', 'pipeline', 'criado_em', 'data_venda', 'tempo_venda']].copy()
@@ -2344,7 +2732,7 @@ with tab9:
         # SEÇÃO 2: ROI MARKETING - ANÁLISE DE CAMPANHAS
         # ========================================
         st.markdown("#### 📣 ROI Marketing - Análise de Campanhas")
-        st.caption("Identifique quais campanhas geram mais demos e quais desqualificam mais")
+        st.caption("💡 Compare performance de campanhas — volume de demos, conversões e taxa de desqualificação para otimizar investimento em mídia")
         
         # Verificar se existem colunas de UTM
         utm_cols_disponiveis = []
@@ -2478,7 +2866,7 @@ with tab9:
                     color='Métrica',
                     orientation='h',
                     title='📊 Top 10 - Demos e Conversões por Campanha',
-                    labels={'Quantidade': 'Quantidade', 'Campanha/Fonte': ''},
+                    labels={'Quantidade': '', 'Campanha/Fonte': ''},
                     color_discrete_map={'Demos': '#4A9FFF', 'Convertidos': '#48BB78'},
                     text='Quantidade',
                     barmode='group'
@@ -2486,16 +2874,30 @@ with tab9:
                 fig_demos.update_layout(
                     height=450,
                     showlegend=True,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
                     legend=dict(
                         orientation="h",
                         yanchor="bottom",
                         y=1.02,
                         xanchor="center",
-                        x=0.5
+                        x=0.5,
+                        font=dict(size=12, color='#ffffff'),
+                        bgcolor='rgba(0,0,0,0)'
                     ),
-                    yaxis={'categoryorder': 'total ascending'}
+                    yaxis=dict(
+                        categoryorder='total ascending',
+                        tickfont=dict(size=11, color='#CBD5E0')
+                    ),
+                    xaxis=dict(
+                        tickfont=dict(size=12, color='#CBD5E0'),
+                        gridcolor='rgba(255,255,255,0.1)',
+                        showgrid=True
+                    ),
+                    margin=dict(l=20, r=20, t=60, b=40),
+                    hoverlabel=dict(bgcolor='#2d3748', font_size=14)
                 )
-                fig_demos.update_traces(textposition='outside', textfont_size=11)
+                fig_demos.update_traces(textposition='outside', textfont=dict(size=11, color='#CBD5E0'))
                 st.plotly_chart(fig_demos, width='stretch')
             
             with col_graf2:
@@ -2510,7 +2912,7 @@ with tab9:
                         y='Campanha/Fonte',
                         orientation='h',
                         title='⚠️ Taxa de Desqualificação por Campanha',
-                        labels={'taxa_desqualificacao': 'Taxa de Desqualificação (%)', 'Campanha/Fonte': ''},
+                        labels={'taxa_desqualificacao': '', 'Campanha/Fonte': ''},
                         color='taxa_desqualificacao',
                         color_continuous_scale='Reds',
                         text=df_desq['taxa_desqualificacao'].apply(lambda x: f'{x:.1f}%')
@@ -2518,9 +2920,22 @@ with tab9:
                     fig_desq.update_layout(
                         height=400,
                         showlegend=False,
-                        yaxis={'categoryorder': 'total ascending'}
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        yaxis=dict(
+                            categoryorder='total ascending',
+                            tickfont=dict(size=11, color='#CBD5E0')
+                        ),
+                        xaxis=dict(
+                            tickfont=dict(size=12, color='#CBD5E0'),
+                            gridcolor='rgba(255,255,255,0.1)',
+                            showgrid=True
+                        ),
+                        margin=dict(l=20, r=20, t=40, b=40),
+                        hoverlabel=dict(bgcolor='#2d3748', font_size=14),
+                        coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
                     )
-                    fig_desq.update_traces(textposition='outside', textfont_size=12)
+                    fig_desq.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
                     st.plotly_chart(fig_desq, width='stretch')
                 else:
                     st.info("Dados insuficientes para análise de desqualificação (mínimo 3 demos por campanha)")
@@ -2601,6 +3016,7 @@ with tab9:
         # SEÇÃO 3: TABELA DE DEMOS REALIZADAS
         # ========================================
         st.markdown("#### 📋 Lista de Demonstrações Realizadas")
+        st.caption("📊 Demos do período selecionado — filtre por status, pesquise leads e acesse links do Kommo")
         
         # Preparar DataFrame para exibição
         df_demos_display = demos_realizadas_df[['id', 'lead_name', 'vendedor', 'data_demo', 'status']].copy()
@@ -2656,11 +3072,29 @@ with tab9:
                         x='Quantidade',
                         title='Motivos de Desqualificação',
                         orientation='h',
-                        labels={'Motivo': 'Motivo', 'Quantidade': 'Quantidade'},
+                        labels={'Motivo': '', 'Quantidade': ''},
                         color='Quantidade',
-                        color_continuous_scale='Reds'
+                        color_continuous_scale='Reds',
+                        text='Quantidade'
                     )
-                    fig_motivos.update_layout(height=max(300, len(df_motivos) * 40), showlegend=False)
+                    fig_motivos.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+                    fig_motivos.update_layout(
+                        height=max(300, len(df_motivos) * 40),
+                        showlegend=False,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        yaxis=dict(
+                            tickfont=dict(size=12, color='#CBD5E0')
+                        ),
+                        xaxis=dict(
+                            tickfont=dict(size=12, color='#CBD5E0'),
+                            gridcolor='rgba(255,255,255,0.1)',
+                            showgrid=True
+                        ),
+                        margin=dict(l=20, r=20, t=40, b=40),
+                        hoverlabel=dict(bgcolor='#2d3748', font_size=14),
+                        coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
+                    )
                     st.plotly_chart(fig_motivos, width='stretch')
                 
                 with col_tabela:

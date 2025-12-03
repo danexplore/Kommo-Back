@@ -9,6 +9,7 @@ from services.supabase_service import (
     get_all_leads_for_summary,
     get_tempo_por_etapa,
     get_chamadas_vendedores,
+    get_hour_noshow_analitycs,
 )
 
 from services.gemini_service import (
@@ -27,6 +28,7 @@ __all__ = [
     'get_all_leads_for_summary',
     'get_tempo_por_etapa',
     'get_chamadas_vendedores',
+    'get_hour_noshow_analitycs',
     # Gemini
     'init_gemini',
     'get_gemini',

@@ -436,3 +436,29 @@ def get_chamadas_vendedores(data_inicio: datetime, data_fim: datetime) -> pd.Dat
     logger.info("Nenhuma chamada encontrada no período")
     return pd.DataFrame()
 
+@st.cache_data(ttl=CACHE_TTL_LEADS)
+@log_execution("supabase_service")
+@handle_error(default_return=pd.DataFrame(), show_user_error=False)
+def get_hour_noshow_analitycs(data_inicio: datetime, data_fim: datetime) -> pd.DataFrame:
+    """
+    Busca análises de no-shows por hora do dia.
+    
+    Args:
+        data_inicio: Data inicial do período
+        data_fim: Data final do período
+    Returns:
+        DataFrame com análises de no-shows por hora
+    """
+    supabase = get_supabase()
+    
+    response = supabase.rpc('calcular_taxa_noshow_por_hora', {
+        'data_inicio': data_inicio.isoformat(),
+        'data_fim': data_fim.isoformat()
+    }).execute()
+    
+    if response.data:
+        logger.info("Análises de no-shows por hora carregadas", records=len(response.data))
+        return pd.DataFrame(response.data)
+    
+    logger.info("Nenhum dado de no-shows por hora encontrado")
+    return pd.DataFrame()
