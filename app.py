@@ -1033,9 +1033,13 @@ with tab3:
                     showgrid=True
                 ),
                 margin=dict(l=20, r=20, t=40, b=60),
-                hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+                hoverlabel=dict(bgcolor='#2d3748', font_size=14, font_family='Arial')
             )
-            fig.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+            fig.update_traces(
+                textposition='outside',
+                textfont=dict(size=12, color='#CBD5E0'),
+                hovertemplate='<b>%{x}</b><br>📅 Demos hoje: <b>%{y}</b><extra></extra>'
+            )
             st.plotly_chart(fig, width='stretch', key="demos_by_vendor_chart")
         
         with col_charts[1]:
@@ -1114,9 +1118,14 @@ with tab3:
                     showgrid=True
                 ),
                 margin=dict(l=20, r=20, t=40, b=40),
-                hoverlabel=dict(bgcolor='#2d3748', font_size=14)
+                hoverlabel=dict(bgcolor='#2d3748', font_size=14, font_family='Arial')
             )
-            fig.update_traces(textposition='outside', textfont=dict(size=11, color='#CBD5E0'))
+            fig.update_traces(
+                textposition='outside',
+                textfont=dict(size=11, color='#CBD5E0'),
+                hovertemplate='<b>🕐 %{x}</b><br>Taxa no-show: <b>%{y:.1f}%</b><br>📅 Total demos: %{customdata[0]}<br>❌ No-shows: %{customdata[1]}<extra></extra>',
+                customdata=df_noshow_display[['total_demos_agendadas', 'total_noshows']].values
+            )
             st.plotly_chart(fig, width='stretch')
         
         with col_table:
@@ -1466,7 +1475,11 @@ with tab6:
                             margin=dict(l=20, r=20, t=40, b=80),
                             hoverlabel=dict(bgcolor='#2d3748', font_size=14)
                         )
-                        fig.update_traces(textposition='outside', textfont=dict(size=10, color='#CBD5E0'))
+                        fig.update_traces(
+                            textposition='outside',
+                            textfont=dict(size=10, color='#CBD5E0'),
+                            hovertemplate='<b>%{x}</b><br>⏱️ Tempo Médio: %{y:.1f} dias<extra></extra>'
+                        )
                         st.plotly_chart(fig, width='stretch', key="tempo_etapa_chart")
                 
                 with col_table:
@@ -1769,7 +1782,8 @@ with tab7:
                 fig_funil.update_traces(
                     textposition='outside',
                     textfont_size=18,
-                    textfont=dict(family="Arial", color="white", weight="bold")
+                    textfont=dict(family="Arial", color="white", weight="bold"),
+                    hovertemplate='<b>%{y}</b><br>📊 Quantidade: %{x:,.0f}<extra></extra>'
                 )
                 fig_funil.update_yaxes(
                     categoryorder='array',
@@ -1844,7 +1858,11 @@ with tab7:
                         color_continuous_scale='Greens',
                         text='Efetivas'
                     )
-                    fig_ranking.update_traces(textposition='outside', textfont=dict(size=14, color='#CBD5E0'))
+                    fig_ranking.update_traces(
+                        textposition='outside',
+                        textfont=dict(size=14, color='#CBD5E0'),
+                        hovertemplate='<b>%{x}</b><br>✅ Ligações Efetivas: %{y:,.0f}<extra></extra>'
+                    )
                     fig_ranking.update_layout(
                         height=400,
                         plot_bgcolor='rgba(0,0,0,0)',
@@ -1876,6 +1894,9 @@ with tab7:
                         title='Eficiência vs Volume',
                         labels={'Discagens': '', 'Taxa Efet. (%)': ''},
                         hover_data=['Atendidas', 'Efetivas', 'TMD (min)']
+                    )
+                    fig_scatter.update_traces(
+                        hovertemplate='<b>%{meta}</b><br>📞 Discagens: %{x:,.0f}<br>🎯 Taxa Efetividade: %{y:.1f}%<br>✅ Efetivas: %{customdata[1]}<br>📱 Atendidas: %{customdata[0]}<br>⏱️ TMD: %{customdata[2]:.1f} min<extra></extra>'
                     )
                     fig_scatter.update_layout(
                         height=400,
@@ -1950,7 +1971,11 @@ with tab7:
                     color_continuous_scale='Blues',
                     text='Quantidade'
                 )
-                fig_motivos.update_traces(textposition='outside', textfont=dict(size=14, color='#CBD5E0'))
+                fig_motivos.update_traces(
+                    textposition='outside',
+                    textfont=dict(size=14, color='#CBD5E0'),
+                    hovertemplate='<b>%{y}</b><br>📊 Quantidade: %{x:,.0f}<extra></extra>'
+                )
                 fig_motivos.update_layout(
                     height=400,
                     yaxis_title='',
@@ -1989,7 +2014,8 @@ with tab7:
                         textposition='outside',
                         textfont=dict(size=12, color='#CBD5E0'),
                         marker_line_width=1.5,
-                        marker_line_color='#1a1f2e'
+                        marker_line_color='#1a1f2e',
+                        hovertemplate='<b>%{x:.1f} min</b><br>📞 Ligações: %{y:,.0f}<extra></extra>'
                     )
                     # Calcular o máximo valor para limitar o range
                     max_count = len(df_atendidas_duracao)
@@ -2344,7 +2370,11 @@ with tab8:
                     color_continuous_scale='Blues',
                     text='Total Vendas'
                 )
-                fig_vendas_vendedor.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+                fig_vendas_vendedor.update_traces(
+                    textposition='outside',
+                    textfont=dict(size=12, color='#CBD5E0'),
+                    hovertemplate='<b>%{x}</b><br>💰 Vendas: <b>%{y}</b><extra></extra>'
+                )
                 fig_vendas_vendedor.update_layout(
                     height=400,
                     plot_bgcolor='rgba(0,0,0,0)',
@@ -2360,7 +2390,7 @@ with tab8:
                         showgrid=True
                     ),
                     margin=dict(l=20, r=20, t=40, b=80),
-                    hoverlabel=dict(bgcolor='#2d3748', font_size=14),
+                    hoverlabel=dict(bgcolor='#2d3748', font_size=14, font_family='Arial'),
                     coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
                 )
                 st.plotly_chart(fig_vendas_vendedor, width='stretch')
@@ -2377,7 +2407,11 @@ with tab8:
                     color_continuous_scale='Greens',
                     text=df_vendedor_stats.head(10)['Taxa Conversão (%)'].apply(lambda x: f'{x:.1f}%')
                 )
-                fig_conversao_vendedor.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+                fig_conversao_vendedor.update_traces(
+                    textposition='outside',
+                    textfont=dict(size=12, color='#CBD5E0'),
+                    hovertemplate='<b>%{x}</b><br>🎯 Taxa de conversão: <b>%{y:.1f}%</b><extra></extra>'
+                )
                 fig_conversao_vendedor.update_layout(
                     height=400,
                     plot_bgcolor='rgba(0,0,0,0)',
@@ -2393,7 +2427,7 @@ with tab8:
                         showgrid=True
                     ),
                     margin=dict(l=20, r=20, t=40, b=80),
-                    hoverlabel=dict(bgcolor='#2d3748', font_size=14),
+                    hoverlabel=dict(bgcolor='#2d3748', font_size=14, font_family='Arial'),
                     coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
                 )
                 st.plotly_chart(fig_conversao_vendedor, width='stretch')
@@ -2451,7 +2485,8 @@ with tab8:
             fig_historico.update_traces(
                 line_color='#4A9FFF',
                 line_width=2.5,
-                marker=dict(size=8, line=dict(width=1, color='#1a1f2e'))
+                marker=dict(size=8, line=dict(width=1, color='#1a1f2e')),
+                hovertemplate='<b>%{x}</b><br>💰 Vendas: %{y:,.0f}<extra></extra>'
             )
             fig_historico.update_layout(
                 height=400,
@@ -2519,7 +2554,11 @@ with tab8:
                 color_continuous_scale='Blues',
                 text='vendas'
             )
-            fig_dia_semana.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+            fig_dia_semana.update_traces(
+                textposition='outside',
+                textfont=dict(size=12, color='#CBD5E0'),
+                hovertemplate='<b>%{x}</b><br>📅 Vendas: %{y:,.0f}<extra></extra>'
+            )
             fig_dia_semana.update_layout(
                 height=350,
                 plot_bgcolor='rgba(0,0,0,0)',
@@ -2568,7 +2607,10 @@ with tab8:
                     margin=dict(l=20, r=20, t=40, b=60),
                     hoverlabel=dict(bgcolor='#2d3748', font_size=14)
                 )
-                fig_pipeline.update_traces(textfont=dict(color='#ffffff'))
+                fig_pipeline.update_traces(
+                    textfont=dict(color='#ffffff'),
+                    hovertemplate='<b>%{label}</b><br>💰 Vendas: %{value:,.0f}<br>📊 Percentual: %{percent}<extra></extra>'
+                )
                 st.plotly_chart(fig_pipeline, width='stretch')
         
         st.markdown("")
@@ -2610,7 +2652,11 @@ with tab8:
                 hoverlabel=dict(bgcolor='#2d3748', font_size=14),
                 bargap=0.1
             )
-            fig_tempo_dist.update_traces(marker_line_width=1.5, marker_line_color='#1a1f2e')
+            fig_tempo_dist.update_traces(
+                marker_line_width=1.5,
+                marker_line_color='#1a1f2e',
+                hovertemplate='<b>%{x:.0f} dias</b><br>📊 Quantidade: %{y:,.0f}<extra></extra>'
+            )
             st.plotly_chart(fig_tempo_dist, width='stretch')
         
         with col_ciclo2:
@@ -2897,7 +2943,11 @@ with tab9:
                     margin=dict(l=20, r=20, t=60, b=40),
                     hoverlabel=dict(bgcolor='#2d3748', font_size=14)
                 )
-                fig_demos.update_traces(textposition='outside', textfont=dict(size=11, color='#CBD5E0'))
+                fig_demos.update_traces(
+                    textposition='outside',
+                    textfont=dict(size=11, color='#CBD5E0'),
+                    hovertemplate='<b>%{y}</b><br>📊 %{meta}: %{x:,.0f}<extra></extra>'
+                )
                 st.plotly_chart(fig_demos, width='stretch')
             
             with col_graf2:
@@ -2935,7 +2985,11 @@ with tab9:
                         hoverlabel=dict(bgcolor='#2d3748', font_size=14),
                         coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
                     )
-                    fig_desq.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+                    fig_desq.update_traces(
+                        textposition='outside',
+                        textfont=dict(size=12, color='#CBD5E0'),
+                        hovertemplate='<b>%{y}</b><br>⚠️ Taxa de Desqualificação: %{x:.1f}%<extra></extra>'
+                    )
                     st.plotly_chart(fig_desq, width='stretch')
                 else:
                     st.info("Dados insuficientes para análise de desqualificação (mínimo 3 demos por campanha)")
@@ -3077,7 +3131,11 @@ with tab9:
                         color_continuous_scale='Reds',
                         text='Quantidade'
                     )
-                    fig_motivos.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+                    fig_motivos.update_traces(
+                        textposition='outside',
+                        textfont=dict(size=12, color='#CBD5E0'),
+                        hovertemplate='<b>%{y}</b><br>❌ Quantidade: %{x:,.0f}<extra></extra>'
+                    )
                     fig_motivos.update_layout(
                         height=max(300, len(df_motivos) * 40),
                         showlegend=False,

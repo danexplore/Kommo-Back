@@ -58,7 +58,8 @@ def create_line_chart(
             xanchor="center",
             x=0.5,
             font=dict(size=12, color='#ffffff'),
-            bgcolor='rgba(0,0,0,0)'
+            bgcolor='rgba(0,0,0,0)',
+            itemsizing='constant'
         ),
         xaxis=dict(
             tickfont=dict(size=11, color='#CBD5E0'),
@@ -71,13 +72,19 @@ def create_line_chart(
             showgrid=True,
             zeroline=False
         ),
-        margin=dict(l=20, r=20, t=60, b=40)
+        margin=dict(l=20, r=20, t=60, b=40),
+        hoverlabel=dict(
+            bgcolor='#2d3748',
+            font_size=14,
+            font_family="Arial"
+        )
     )
     
     if show_markers:
         fig.update_traces(
             line=dict(width=2.5),
-            marker=dict(size=8, line=dict(width=1, color='#1a1f2e'))
+            marker=dict(size=8, line=dict(width=1, color='#1a1f2e')),
+            hovertemplate='<b>%{y}</b><extra>%{fullData.name}</extra>'
         )
     
     return fig
@@ -132,17 +139,32 @@ def create_bar_chart(
         showlegend=False,
         xaxis=dict(
             tickfont=dict(size=11, color='#CBD5E0'),
-            gridcolor='rgba(255,255,255,0.1)'
+            gridcolor='rgba(255,255,255,0.1)',
+            tickangle=-45 if not horizontal else 0
         ),
         yaxis=dict(
             tickfont=dict(size=11, color='#CBD5E0'),
-            gridcolor='rgba(255,255,255,0.1)'
+            gridcolor='rgba(255,255,255,0.1)',
+            showgrid=True
         ),
-        margin=dict(l=20, r=20, t=60, b=40)
+        margin=dict(l=20, r=20, t=60, b=80 if not horizontal else 40),
+        hoverlabel=dict(bgcolor='#2d3748', font_size=14),
+        coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
     )
     
     if show_text:
-        fig.update_traces(textposition='outside', textfont_size=12)
+        if horizontal:
+            fig.update_traces(
+                textposition='outside',
+                textfont_size=12,
+                hovertemplate='<b>%{y}</b><br>📊 Valor: %{x:,.0f}<extra></extra>'
+            )
+        else:
+            fig.update_traces(
+                textposition='outside',
+                textfont_size=12,
+                hovertemplate='<b>%{x}</b><br>📊 Valor: %{y:,.0f}<extra></extra>'
+            )
     
     return fig
 
@@ -175,7 +197,8 @@ def create_funnel_chart(
         x=values,
         marker=dict(color=colors),
         textfont=dict(size=14, color='white'),
-        textposition='inside'
+        textposition='inside',
+        hovertemplate='<b>%{y}</b><br>📊 Quantidade: %{x:,.0f}<extra></extra>'
     ))
     
     fig.update_layout(
@@ -183,7 +206,9 @@ def create_funnel_chart(
         height=height,
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='#ffffff')
+        font=dict(color='#ffffff'),
+        margin=dict(l=20, r=20, t=60, b=40),
+        hoverlabel=dict(bgcolor='#2d3748', font_size=14)
     )
     
     return fig
@@ -231,13 +256,16 @@ def create_histogram(
             tickfont=dict(size=11, color='#CBD5E0'),
             gridcolor='rgba(255,255,255,0.1)',
             showticklabels=False
-        )
+        ),
+        margin=dict(l=20, r=20, t=60, b=40),
+        hoverlabel=dict(bgcolor='#2d3748', font_size=14)
     )
     
     fig.update_traces(
         textposition='outside',
         textfont_size=12,
-        marker_line_width=1.5
+        marker_line_width=1.5,
+        hovertemplate='<b>%{x}</b><br>📊 Quantidade: %{y:,.0f}<extra></extra>'
     )
     
     return fig
@@ -282,14 +310,27 @@ def create_scatter_chart(
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         showlegend=True if color else False,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11, color='#ffffff'),
+            bgcolor='rgba(0,0,0,0)'
+        ),
         xaxis=dict(
             tickfont=dict(size=11, color='#CBD5E0'),
-            gridcolor='rgba(255,255,255,0.1)'
+            gridcolor='rgba(255,255,255,0.1)',
+            showgrid=True
         ),
         yaxis=dict(
             tickfont=dict(size=11, color='#CBD5E0'),
-            gridcolor='rgba(255,255,255,0.1)'
-        )
+            gridcolor='rgba(255,255,255,0.1)',
+            showgrid=True
+        ),
+        margin=dict(l=20, r=20, t=60, b=40),
+        hoverlabel=dict(bgcolor='#2d3748', font_size=14)
     )
     
     return fig

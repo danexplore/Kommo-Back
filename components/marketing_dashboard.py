@@ -333,7 +333,11 @@ def render_desqualification_analysis(
         hoverlabel=dict(bgcolor='#2d3748', font_size=14),
         coloraxis_colorbar=dict(tickfont=dict(size=11, color='#CBD5E0'))
     )
-    fig.update_traces(textposition='outside', textfont=dict(size=12, color='#CBD5E0'))
+    fig.update_traces(
+        textposition='outside',
+        textfont=dict(size=12, color='#CBD5E0'),
+        hovertemplate='<b>%{y}</b><br>⚠️ Taxa: %{x:.1f}%<br>❌ Desqualificados: %{customdata[0]}<br>📊 Total Demos: %{customdata[1]}<extra></extra>'
+    )
     
     st.plotly_chart(fig, width='stretch')
     
