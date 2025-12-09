@@ -462,3 +462,78 @@ def get_hour_noshow_analitycs(data_inicio: datetime, data_fim: datetime) -> pd.D
     
     logger.info("Nenhum dado de no-shows por hora encontrado")
     return pd.DataFrame()
+
+
+@st.cache_data(ttl=CACHE_TTL_LEADS, show_spinner=False)
+@log_execution("supabase_service")
+@handle_error(default_return=pd.DataFrame(), show_user_error=False)
+def get_leads_by_data_demo(
+    data_inicio: datetime, 
+    data_fim: datetime,
+    vendedores: Optional[List[str]] = None,
+    pipelines: Optional[List[str]] = None
+) -> pd.DataFrame:
+    """
+    Busca leads filtrados por data_demo (data da demonstração).
+    Ideal para análises de demos realizadas.
+    
+    Args:
+        data_inicio: Data inicial do período
+        data_fim: Data final do período
+        vendedores: Lista de vendedores para filtrar (opcional)
+        pipelines: Lista de pipelines para filtrar (opcional)
+    
+    Returns:
+        DataFrame com os leads que tiveram demo no período
+    """
+    supabase = get_supabase()
+    
+    data_inicio_iso = data_inicio.isoformat()
+    data_fim_iso = data_fim.isoformat()
+    
+    logger.info(
+        "Buscando leads por data_demo",
+        data_inicio=data_inicio_iso,
+        data_fim=data_fim_iso
+    )
+    
+    # Tentar RPC primeiro
+    try:
+        response = supabase.rpc('get_leads_by_data_demo', {
+            'p_data_inicio': data_inicio_iso,
+            'p_data_fim': data_fim_iso
+        }).execute()
+        
+        if response.data:
+            df = pd.DataFrame(response.data)
+            logger.info("RPC get_leads_by_data_demo executada com sucesso", records=len(df))
+        else:
+            df = pd.DataFrame()
+    except Exception as e:
+        logger.warning("RPC get_leads_by_data_demo falhou, usando fallback", exception=str(e))
+        # Fallback: query direta
+        try:
+            response = supabase.table('kommo_leads_statistics').select('*').gte('data_demo', data_inicio_iso).lte('data_demo', data_fim_iso).execute()
+            df = pd.DataFrame(response.data) if response.data else pd.DataFrame()
+        except Exception as e2:
+            logger.error("Fallback também falhou", exception=str(e2))
+            return pd.DataFrame()
+    
+    if df.empty:
+        logger.info("Nenhum lead com demo no período")
+        return pd.DataFrame()
+    
+    # Aplicar filtros
+    if vendedores and len(vendedores) > 0:
+        df = df[df['vendedor'].isin(vendedores)]
+        logger.debug("Filtro de vendedor aplicado", vendedores=len(vendedores), records=len(df))
+    
+    if pipelines and len(pipelines) > 0:
+        df = df[df['pipeline'].isin(pipelines)]
+        logger.debug("Filtro de pipeline aplicado", pipelines=len(pipelines), records=len(df))
+    
+    # Converter e pré-computar datas
+    df = _convert_and_precompute_dates(df)
+    
+    logger.info("Leads por data_demo carregados", records=len(df))
+    return df

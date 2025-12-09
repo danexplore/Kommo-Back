@@ -27,6 +27,7 @@ from services import (
     get_gemini,
     get_leads_data as service_get_leads_data,
     get_leads_by_criado_em as service_get_leads_by_criado_em,
+    get_leads_by_data_demo as service_get_leads_by_data_demo,
     get_all_leads_for_summary,
     get_chamadas_vendedores as service_get_chamadas,
     get_tempo_por_etapa,
@@ -2727,23 +2728,31 @@ with tab9:
     st.markdown("### ✅ Demonstrações Realizadas")
     st.caption("Análise completa das demonstrações realizadas no período")
     
+    # Buscar leads por data_demo usando RPC otimizada
+    df_demos_periodo = service_get_leads_by_data_demo(
+        datetime.combine(data_inicio, datetime.min.time()),
+        datetime.combine(data_fim, datetime.max.time()),
+        vendedores=vendedores_selecionados if vendedores_selecionados else None,
+        pipelines=pipelines_selecionados if pipelines_selecionados else None
+    )
+    
     # Filtrar demos realizadas usando constante DEMO_COMPLETED_STATUSES
-    demos_realizadas_df = df_leads[
-        (df_leads['data_demo'].notna()) &
-        (df_leads['data_demo'] >= pd.Timestamp(datetime.combine(data_inicio, datetime.min.time()))) &
-        (df_leads['data_demo'] <= pd.Timestamp(datetime.combine(data_fim, datetime.max.time()))) &
-        (
+    if not df_demos_periodo.empty:
+        demos_realizadas_df = df_demos_periodo[
             (
-                (df_leads['status'] == 'Desqualificados') &
-                (df_leads['data_demo'].notna()) &
-                (df_leads['data_noshow'].isna())
-            ) |
-            (
-                (df_leads['data_demo'].notna()) &
-                (df_leads['status'].isin(DEMO_COMPLETED_STATUSES))
+                (
+                    (df_demos_periodo['status'] == 'Desqualificados') &
+                    (df_demos_periodo['data_demo'].notna()) &
+                    (df_demos_periodo['data_noshow'].isna())
+                ) |
+                (
+                    (df_demos_periodo['data_demo'].notna()) &
+                    (df_demos_periodo['status'].isin(DEMO_COMPLETED_STATUSES))
+                )
             )
-        )
-    ].copy()
+        ].copy()
+    else:
+        demos_realizadas_df = pd.DataFrame()
     
     if not demos_realizadas_df.empty:
         # ========================================
