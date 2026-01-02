@@ -698,7 +698,7 @@ with tab2:
         if gerar_insight or 'insights_gerados' not in st.session_state:
             with st.spinner("🤖 Analisando dados e gerando insights estratégicos..."):
                 # Gerar insights
-                insights = gerar_insights_ia(metricas_atual, metricas_anterior, periodo_descricao)
+                insights = ''  # gerar_insights_ia(metricas_atual, metricas_anterior, periodo_descricao)
                 
                 if insights:
                     st.session_state['insights_gerados'] = insights
@@ -764,16 +764,17 @@ with tab2:
                     'role': 'user',
                     'content': user_input
                 })
-                
+     
                 # Gerar resposta da IA
                 with st.spinner("🤖 Processando sua pergunta..."):
-                    resposta = chat_com_dados(
+                    resposta = '' 
+                    '''resposta = chat_com_dados(
                         user_input,
                         metricas_atual,
                         metricas_anterior,
                         periodo_descricao,
                         st.session_state['chat_historico'][:-1]  # Histórico sem a mensagem atual
-                    )
+                    ) '''
                     
                     # Adicionar resposta ao histórico
                     st.session_state['chat_historico'].append({
