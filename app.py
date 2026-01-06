@@ -834,7 +834,8 @@ for data in date_range:
             'Agendamentos': 0,
             'Demos no Dia': 0,
             'Noshow': 0,
-            'Demos Realizadas': 0
+            'Demos Realizadas': 0,
+            'Vendas': 0
         })
         continue
     
@@ -877,6 +878,10 @@ for data in date_range:
     else:
         demos_realizadas = 0
         
+    vendas = len(df_all_leads[
+        (df_all_leads['data_venda'].dt.date == data_date)
+    ]) if 'data_venda' in df_all_leads.columns else 0
+    
     # Percentual de demos realizadas em relação ao total de demos agendadas no dia
     porcentagem_demos = (demos_realizadas / demos_dia * 100) if demos_dia > 0 else 0
     
@@ -891,6 +896,7 @@ for data in date_range:
         'Demos no Dia': demos_dia,
         'Noshow': noshow,
         'Demos Realizadas': demos_realizadas,
+        'Vendas': vendas,
         'Porcentagem Demos': porcentagem_demos,
         '% Noshow': porcentagem_noshow,
     })
@@ -913,6 +919,7 @@ total_row = {
     'Demos no Dia': df_resumo['Demos no Dia'].sum(),
     'Noshow': df_resumo['Noshow'].sum(),
     'Demos Realizadas': df_resumo['Demos Realizadas'].sum(),
+    'Vendas': df_resumo['Vendas'].sum(),
     'Porcentagem Demos': (df_resumo['Demos Realizadas'].sum() / df_resumo['Demos no Dia'].sum() * 100) if df_resumo['Demos no Dia'].sum() > 0 else 0,
     '% Noshow': (df_resumo['Noshow'].sum() / df_resumo['Demos no Dia'].sum() * 100) if df_resumo['Demos no Dia'].sum() > 0 else 0
 }
@@ -1222,6 +1229,7 @@ with tab4:
                 "Demos no Dia": st.column_config.NumberColumn("Demos no Dia", format="%d"),
                 "Noshow": st.column_config.NumberColumn("Noshow", format="%d"),
                 "Demos Realizadas": st.column_config.NumberColumn("Demos Realizadas", format="%d"),
+                "Vendas": st.column_config.NumberColumn("Vendas", format="%d"),
                 "Porcentagem Demos": st.column_config.NumberColumn("% Realizadas", format="%.1f%%"),
                 "% Noshow": st.column_config.NumberColumn("% Noshow", format="%.1f%%"),
             },
@@ -2456,17 +2464,9 @@ with tab8:
         st.markdown("#### 📈 Histórico de Vendas")
         st.caption("📅 Evolução diária de vendas — acompanhe tendências e identifique dias atípicos")
         
-        # Criar range completo de datas do período
-        date_range_vendas = pd.date_range(start=data_inicio, end=data_fim, freq='D')
-        df_todas_datas = pd.DataFrame({'data_venda_formatada': date_range_vendas.date})
-        
-        # Vendas por dia
+        # Vendas por dia (apenas dias com vendas)
         df_vendas['data_venda_formatada'] = df_vendas['data_venda'].dt.date
         df_vendas_dia = df_vendas.groupby('data_venda_formatada').size().reset_index(name='vendas')
-        
-        # Merge com todas as datas do período, preenchendo com 0 onde não há vendas
-        df_vendas_dia = df_todas_datas.merge(df_vendas_dia, on='data_venda_formatada', how='left')
-        df_vendas_dia['vendas'] = df_vendas_dia['vendas'].fillna(0).astype(int)
         
         df_vendas_dia['data_venda_formatada'] = pd.to_datetime(df_vendas_dia['data_venda_formatada'])
         df_vendas_dia = df_vendas_dia.sort_values('data_venda_formatada')
@@ -2505,7 +2505,8 @@ with tab8:
                     tickfont=dict(size=12, color='#CBD5E0'),
                     gridcolor='rgba(255,255,255,0.1)',
                     showgrid=True,
-                    zeroline=False
+                    zeroline=False,
+                    range=[0, None]
                 ),
                 margin=dict(l=20, r=20, t=40, b=40),
                 hoverlabel=dict(bgcolor='#2d3748', font_size=14)
