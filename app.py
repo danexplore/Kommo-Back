@@ -606,7 +606,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
 with tab1:
     # Calcular leads que exigem atualização
     leads_atualizacao = df_leads[
-        (pd.to_datetime(df_leads['data_hora_demo']) <= hoje_hora) &
+        (pd.to_datetime(df_leads['data_hora_demo'], utc=True).dt.tz_convert(TZ_BRASILIA) <= hoje_hora) &
         (df_leads['data_noshow'].isna()) &
         (df_leads['data_venda'].isna()) &
         (~df_leads['status'].isin(STATUS_POS_DEMO))
